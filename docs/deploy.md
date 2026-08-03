@@ -20,10 +20,11 @@ Nothing to configure; the site lives at
    1 GB disk at `/data`) and generates `LUMNIA_ADMIN_TOKEN` for you.
 2. Copy the generated token from **lumnia-api → Environment** — it is what
    you paste into Studio to publish.
-3. Check the service URL. If it is exactly
-   `https://lumnia-api.onrender.com`, you are done. If Render suffixed the
-   name, put the real URL into `VITE_API` in
-   `.github/workflows/deploy-web.yml` and push.
+3. Check the service URL against `VITE_API` in
+   `.github/workflows/deploy-web.yml` (currently
+   `https://lumnia-api-lkfg.onrender.com`). If Render assigned a different
+   hostname, update `VITE_API` there and in
+   `.github/workflows/smoke.yml`, then push.
 
 The disk requires Render's starter plan; on the free tier the SQLite file
 would reset on every restart, which defeats the point of publishing.
