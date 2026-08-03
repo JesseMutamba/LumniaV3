@@ -5,6 +5,8 @@
 # on a missing secret.
 name: Seed first client and report
 
+# Re-runnable at any time — publishing the same report again is a no-op that
+# keeps its share key.
 on:
   push:
     branches: [claude/new-session-h91lyu, main]
