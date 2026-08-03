@@ -81,8 +81,11 @@ const Rail = ({ b, locale, sources }) => (
               </div>
             </div>
             <div className="bar">
-              <div className="env" />
               <div className="fill" style={{ width: `${wA}%` }} />
+              <div
+                className="env"
+                style={{ left: `${wA}%`, width: `${Math.max(0, wP - wA)}%` }}
+              />
               <div className="notch" style={{ left: `${wP}%` }} />
               <div className="pct">{nf((r.actual.n / r.pace.n) * 100, locale, 1)} %</div>
             </div>
@@ -122,7 +125,7 @@ function BarPair({ b, locale, sources }) {
           <span>{t(b.sub, locale)}</span>
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t(b.title, locale)}>
-          {[0, 1, 2, 3, 4].map((i) => {
+          {[1, 2, 3, 4].map((i) => {
             const v = (max * i) / 4
             return (
               <g key={i}>
@@ -133,6 +136,10 @@ function BarPair({ b, locale, sources }) {
               </g>
             )
           })}
+          <line className="base" x1={P.l} x2={W - P.r} y1={P.t + ih} y2={P.t + ih} />
+          <text className="ax" x={P.l - 8} y={P.t + ih + 3.5} textAnchor="end">
+            {lab(0)}
+          </text>
           {x.map((m, i) => {
             const x0 = P.l + i * bw + gap / 2
             const p = plan?.values[i]?.n
@@ -160,7 +167,7 @@ function BarPair({ b, locale, sources }) {
                 y1={P.t - 6}
                 y2={P.t + ih}
               />
-              <text className="ax" x={P.l + b.cutoff * bw + 7} y={P.t - 2}>
+              <text className="cut-t" x={P.l + b.cutoff * bw + 7} y={P.t - 2}>
                 {locale === 'fr' ? 'fin des réels' : 'end of actuals'}
               </text>
             </g>

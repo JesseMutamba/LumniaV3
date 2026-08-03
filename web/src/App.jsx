@@ -3,6 +3,7 @@ import Block from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
 import * as api from './lib/api.js'
 import { t } from './lib/format.js'
+import mark from './assets/lumnia-mark.png'
 
 /**
  * Two surfaces, one build.
@@ -39,8 +40,8 @@ export default function App() {
     <div className="shell">
       <div className="top">
         <a className="brand" href="#/">
-          <span className="dot" />
-          Lumnia
+          <img src={mark} alt="" />
+          <span>Lumnia</span>
         </a>
         <div className="grow" />
         {route.view !== 'report' && (
@@ -76,6 +77,7 @@ function Home({ locale }) {
   const L = locale === 'fr'
   return (
     <div className="home">
+      <img className="mark" src={mark} alt="Lumnia" />
       <h1>
         {L ? 'Intelligence opérationnelle vérifiée' : 'Verified operating intelligence'}
       </h1>
@@ -87,17 +89,27 @@ function Home({ locale }) {
       <div className="status">
         {h?.ok ? (
           <>
-            <span className="ok">●</span> API {h.version} · {h.orgs}{' '}
-            {L ? 'clients' : 'clients'} · {h.reports} {L ? 'rapports' : 'reports'}
+            <span className="dot" />
+            <span>API {h.version}</span>
+            <span>·</span>
+            <span>
+              {h.orgs} {L ? 'clients' : 'clients'}
+            </span>
+            <span>·</span>
+            <span>
+              {h.reports} {L ? 'rapports' : 'reports'}
+            </span>
             {!h.publishing_enabled && (
-              <span className="warn">
-                {' '}
-                · {L ? 'publication désactivée' : 'publishing disabled'}
-              </span>
+              <>
+                <span>·</span>
+                <span className="warn">
+                  {L ? 'publication désactivée' : 'publishing disabled'}
+                </span>
+              </>
             )}
           </>
         ) : (
-          <span className="warn">● {L ? "l'API ne répond pas" : 'API not responding'}</span>
+          <span className="warn">{L ? "l'API ne répond pas" : 'API not responding'}</span>
         )}
       </div>
     </div>
@@ -170,7 +182,7 @@ function Viewer({ id, shareKey, locale }) {
             ? "Le code calcule, le langage raconte. Aucun indicateur ne s'affiche sans provenance jusqu'à une cellule source."
             : 'Code computes, language narrates. No metric renders without provenance to a source cell.'}
         </div>
-        Lumnia · pipeline {rep.pipeline_version}
+        <div className="sig">Lumnia · pipeline {rep.pipeline_version}</div>
       </div>
     </div>
   )
