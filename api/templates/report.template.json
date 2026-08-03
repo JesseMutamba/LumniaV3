@@ -1,0 +1,87 @@
+{
+  "id": "pvak-fy26-q1",
+  "org": "pvak",
+  "title":  { "fr": "Budget contre réalité", "en": "Budget vs reality" },
+  "period": { "label": { "fr": "T1 2026", "en": "Q1 2026" },
+              "start": "2026-01-01", "end": "2026-03-31" },
+  "status": "published",
+  "default_locale": "fr",
+  "pipeline_version": "0.2.0",
+
+  "sources": [
+    { "idx": 0, "filename": "Montage_financier_2025_a_2030.xlsx",
+      "sheets": 9, "rows_read": 1419, "checks_run": 12, "checks_passed": 12 },
+    { "idx": 1, "filename": "SUIVI_FINANCES_PVAK.xlsx",
+      "sheets": 7, "rows_read": 1006, "checks_run": 9, "checks_passed": 9 }
+  ],
+
+  "blocks": [
+    { "type": "heading", "level": 2,
+      "label": { "fr": "01 · Exécution", "en": "01 · Execution" },
+      "text":  { "fr": "Titre de section.", "en": "Section headline." },
+      "dek":   { "fr": "Une ou deux phrases.", "en": "A sentence or two." } },
+
+    { "type": "rail",
+      "rows": [
+        { "label": { "fr": "OPEX", "en": "OPEX" },
+          "envelope": { "n": 457299.97, "unit": "USD", "derived": "sum",
+                        "src": { "file": 0, "sheet": "opex", "cells": "C96:N96" } },
+          "pace":     { "n": 112900.00, "unit": "USD", "derived": "sum",
+                        "src": { "file": 0, "sheet": "opex", "cells": "C96:E96" } },
+          "actual":   { "n": 44623.60, "unit": "USD", "derived": "sum",
+                        "src": { "file": 1, "sheet": "COUT DE PRODUCTION (OPEX)", "cells": "D43:F43" } } }
+      ] },
+
+    { "type": "kpiGrid",
+      "items": [
+        { "label": { "fr": "Exécution T1", "en": "Q1 execution" },
+          "tone": "warn",
+          "sub":  { "fr": "176 538 $ contre 438 820 $", "en": "$176,538 against $438,820" },
+          "value": { "n": 0.402, "unit": "ratio", "derived": "ratio",
+                     "src": { "file": 1, "sheet": "TOTAUX", "cells": "D30:F30" } } }
+      ] },
+
+    { "type": "barPair",
+      "title": { "fr": "Sorties mensuelles (USD)", "en": "Monthly outflows (USD)" },
+      "sub":   { "fr": "Jan–Déc 2026", "en": "Jan–Dec 2026" },
+      "x": "months", "fmt": "k", "cutoff": 3,
+      "series": [
+        { "key": "plan", "label": { "fr": "Prévu", "en": "Plan" },
+          "values": [ { "n": 37500, "unit": "USD",
+                        "src": { "file": 0, "sheet": "opex", "cells": "C96" } } ] },
+        { "key": "actual", "label": { "fr": "Réel", "en": "Actual" },
+          "values": [ { "n": 20269.56, "unit": "USD",
+                        "src": { "file": 1, "sheet": "TOTAUX", "cells": "D30" } } ] }
+      ] },
+
+    { "type": "flag", "severity": "caught",
+      "tag":   { "fr": "Piège détecté", "en": "Trap caught" },
+      "title": { "fr": "Titre du constat", "en": "Finding headline" },
+      "body":  { "fr": "Ce qui a été trouvé et pourquoi cela change un chiffre.",
+                 "en": "What was found and why it changes a number." },
+      "src": { "file": 0, "sheet": "salaires 2026", "cells": "B115:C127" },
+      "evidence": { "kind": "tree", "payload": {
+        "parents": [ { "parent": "PLANTATIONS", "value": 87930.28, "delta": 0.0,
+          "children": [ { "name": "PRODUCTION", "value": 36218.48 } ] } ],
+        "naive_sum": 363426.08, "correct_sum": 181713.04, "overstatement": 181713.04 } } },
+
+    { "type": "table",
+      "columns": [
+        { "key": "year",  "label": { "fr": "Année",  "en": "Year" },    "align": "left" },
+        { "key": "rev",   "label": { "fr": "Revenus","en": "Revenue" }, "money": true },
+        { "key": "bal",   "label": { "fr": "Solde",  "en": "Balance" }, "money": true, "signed": true }
+      ],
+      "rows": [
+        { "year": "2026",
+          "rev": { "n": 771190, "unit": "USD",
+                   "src": { "file": 0, "sheet": "RECAP", "cells": "D7" } },
+          "bal": { "n": -556219.97, "unit": "USD",
+                   "src": { "file": 0, "sheet": "RECAP", "cells": "D22" } } }
+      ] },
+
+    { "type": "prose",
+      "text": { "fr": "Paragraphe libre.", "en": "Free paragraph." } },
+
+    { "type": "ledger" }
+  ]
+}
