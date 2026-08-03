@@ -21,7 +21,7 @@ export default function Studio({ locale, onPublished }) {
 
   const L = locale === 'fr'
   const refresh = () => api.listOrgs().then(setOrgs).catch(() => {})
-  useEffect(refresh, [])
+  useEffect(() => { refresh() }, [])
 
   function saveToken(v) {
     api.setToken(v.trim())
