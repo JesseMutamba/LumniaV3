@@ -1,0 +1,57 @@
+# Builds the web client and publishes it to GitHub Pages. Runs on every push
+# that touches web/, and on demand via workflow_dispatch. The API URL is baked
+# into the bundle at build time; if the Render service ends up on a different
+# hostname, update VITE_API below and push.
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches: [claude/new-session-h91lyu, main]
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      # --base ./ makes every asset reference relative, so the bundle works at
+      # https://<user>.github.io/<repo>/ without caring about the path.
+      - run: npm run build -- --base ./
+        working-directory: web
+        env:
+          VITE_API: https://lumnia-api.onrender.com/v1
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

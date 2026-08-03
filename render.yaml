@@ -1,0 +1,28 @@
+# Render Blueprint — creates the Lumnia API as a Docker web service with a
+# persistent disk for the SQLite file. In the Render dashboard: New →
+# Blueprint → select this repo → Apply. Nothing here needs editing first.
+#
+# The starter plan is required for the disk; without one the database resets
+# on every deploy and restart, which defeats the point of publishing.
+services:
+  - type: web
+    name: lumnia-api
+    runtime: docker
+    rootDir: api
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: frankfurt # closest Render region to the DRC
+    healthCheckPath: /v1/health
+    disk:
+      name: lumnia-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: LUMNIA_DB
+        value: /data/lumnia.db
+      - key: LUMNIA_ORIGINS
+        value: https://jessemutamba.github.io
+      - key: LUMNIA_ADMIN_TOKEN
+        generateValue: true # view it in the dashboard: lumnia-api → Environment

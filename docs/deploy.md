@@ -4,6 +4,32 @@ Two pieces. The web client is static files; the API is one small container
 with a SQLite file on a volume. Total cost at this scale: the API host's
 smallest instance, or free tiers.
 
+## The wired-in path: Render + GitHub Pages
+
+This repo ships ready for Render (API) and GitHub Pages (web client).
+
+**Web client** — automatic. `.github/workflows/deploy-web.yml` builds
+`web/` and publishes it to GitHub Pages on every push that touches it.
+Nothing to configure; the site lives at
+`https://jessemutamba.github.io/LumniaV3/`.
+
+**API** — one manual step, because it needs your Render account:
+
+1. In the Render dashboard: **New → Blueprint**, select this repository,
+   Apply. `render.yaml` creates the `lumnia-api` service (Docker, Frankfurt,
+   1 GB disk at `/data`) and generates `LUMNIA_ADMIN_TOKEN` for you.
+2. Copy the generated token from **lumnia-api → Environment** — it is what
+   you paste into Studio to publish.
+3. Check the service URL. If it is exactly
+   `https://lumnia-api.onrender.com`, you are done. If Render suffixed the
+   name, put the real URL into `VITE_API` in
+   `.github/workflows/deploy-web.yml` and push.
+
+The disk requires Render's starter plan; on the free tier the SQLite file
+would reset on every restart, which defeats the point of publishing.
+
+Everything below is the generic recipe for other hosts.
+
 ## 1. The API
 
 ```bash
