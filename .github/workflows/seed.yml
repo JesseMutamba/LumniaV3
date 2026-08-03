@@ -1,7 +1,8 @@
 # Seeds the live platform: creates the PVAK client and publishes the template
 # report. Idempotent — re-running keeps the existing share key. Requires the
-# LUMNIA_ADMIN_TOKEN repository secret; without it the job exits quietly so
-# ordinary pushes never fail on a missing secret.
+# LUMNIA_ADMIN_TOKEN repository secret (Settings > Secrets and variables >
+# Actions); without it the job exits quietly so ordinary pushes never fail
+# on a missing secret.
 name: Seed first client and report
 
 on:
