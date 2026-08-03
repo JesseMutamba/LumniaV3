@@ -20,11 +20,14 @@ jobs:
           test "$code" = "200"
       - name: API is healthy
         run: |
-          curl -sS -m 60 https://lumnia-api.onrender.com/v1/health | tee health.json
-          echo
-          python3 - <<'EOF'
-          import json
-          d = json.load(open("health.json"))
-          assert d.get("ok") is True, d
-          print("api ok:", d)
-          EOF
+          # Retry for up to ~3 minutes: a fresh Render deploy (or a hostname
+          # that just changed hands) can take a moment to start answering.
+          for i in $(seq 1 12); do
+            curl -sS -m 30 https://lumnia-api.onrender.com/v1/health | tee health.json || true
+            echo
+            if python3 -c "import json;d=json.load(open('health.json'));assert d.get('ok') is True" 2>/dev/null; then
+              echo "api ok: $(cat health.json)"; exit 0
+            fi
+            echo "attempt $i: not healthy yet, waiting 15s"; sleep 15
+          done
+          echo "API never became healthy"; cat health.json; exit 1
