@@ -302,6 +302,20 @@ def save_org_context(org_id: str, body: ContextIn):
         raise HTTPException(
             422, f"Unknown module(s): {unknown}. Available: {sorted(MODULES)}"
         )
+    # A ratio naming a metric that does not exist would compute nothing and
+    # say nothing — the author would see a missing tile, not a mistake.
+    dangling = sorted({
+        name
+        for r in body.ratios.values()
+        for name in (r.numerator, r.denominator)
+        if name not in body.metrics
+    })
+    if dangling:
+        raise HTTPException(
+            422,
+            f"Ratio refers to undefined metric(s): {dangling}. "
+            f"Defined: {sorted(body.metrics)}",
+        )
     return store.put_context(org_id, body)
 
 

@@ -36,15 +36,33 @@ pytestmark = pytest.mark.skipif(
 )
 
 PVAK = ContextIn(
-    modules=["coverage", "budget-vs-actual", "reconciliation"],
+    modules=["coverage", "budget-vs-actual", "reconciliation", "efficiency"],
     reconcile_sheets=["JC DGO", "JC Consolidé"],
     journal_code_column="CODE",
     ignore_sheets=["GLOSSAIRE"],
-    metrics={"OPEX": {
-        "budget": {"sheet": "opex", "label": "TOTAL DEPENSES OPEX"},
-        "actual": {"sheet": "COUT DE PRODUCTION (OPEX)", "label": "TOTAL SITE"},
-        "unit": "USD",
-    }},
+    metrics={
+        "OPEX": {
+            "budget": {"sheet": "opex", "label": "TOTAL DEPENSES OPEX"},
+            "actual": {"sheet": "COUT DE PRODUCTION (OPEX)", "label": "TOTAL SITE"},
+            "unit": "USD",
+        },
+        "FFB": {
+            "budget": {"sheet": "PRODUCTION 2025&2026", "label": "BU'26"},
+            "actual": {"sheet": "COUT DE PRODUCTION (OPEX)", "label": "FFB Produits"},
+            "unit": "t",
+        },
+        "CPO": {
+            "budget": {"sheet": "PRODUCTION 2025&2026", "label": "CPO"},
+            "actual": {"sheet": "COUT DE PRODUCTION (OPEX)", "label": "PO Produite"},
+            "unit": "t",
+        },
+    },
+    ratios={
+        "Coût par tonne CPO": {"numerator": "OPEX", "denominator": "CPO",
+                               "unit": "USD/t"},
+        "Taux d'extraction": {"numerator": "CPO", "denominator": "FFB",
+                              "unit": "pct", "lower_is_better": False},
+    },
 )
 
 
@@ -84,6 +102,39 @@ def test_double_counted_entries_match_the_hand_analysis(blocks):
                 if getattr(b, "type", "") == "flag" and "Rapprochement" in b.tag.fr)
     assert "50 écriture" in flag.title.fr
     assert "133 302" in flag.title.fr
+
+
+def test_production_is_further_behind_plan_than_spend(blocks):
+    """The finding a money-only view hides: Q1 used 39,5 % of the budget
+    but produced 30 % of planned CPO. Under-spending was masking
+    under-producing."""
+    opex = _kpi(blocks, "Exécution · OPEX")
+    ffb = _kpi(blocks, "Exécution · FFB")
+    cpo = _kpi(blocks, "Exécution · CPO")
+    assert opex.value.n == pytest.approx(39.5, abs=0.2)
+    assert ffb.value.n == pytest.approx(32.1, abs=0.2)
+    assert cpo.value.n == pytest.approx(30.0, abs=0.2)
+    assert cpo.value.n < opex.value.n
+
+
+def test_cost_per_tonne_is_a_third_above_plan(blocks):
+    """The headline of the efficiency story: 982 $ per tonne of CPO
+    against the 746 $ the plan implied over the same three months."""
+    k = _kpi(blocks, "Coût par tonne CPO")
+    assert k.value.n == pytest.approx(982.5, abs=1.0)
+    assert k.tone == "bad"
+    assert k.lineage[0].n == pytest.approx(44_624, abs=1)   # spend
+    assert k.lineage[1].n == pytest.approx(45, abs=0.5)     # tonnes
+    assert k.lineage[3].n == pytest.approx(746, abs=1)      # rate the plan implied
+    assert k.lineage[-1].n == pytest.approx(32, abs=1)      # per cent above plan
+
+
+def test_extraction_rate_is_close_to_plan(blocks):
+    """Not everything is bad news, and a dashboard that only finds problems
+    stops being read: extraction is running near the planned rate."""
+    k = _kpi(blocks, "Taux d'extraction")
+    assert k.value.n == pytest.approx(21.5, abs=0.3)
+    assert abs(k.lineage[-1].n) < 10        # within 10 % of plan
 
 
 def test_uncoded_entries_are_still_the_open_worklist(blocks):

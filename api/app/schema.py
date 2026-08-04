@@ -292,6 +292,22 @@ class MetricDef(BaseModel):
     owner: str | None = None         # who answers for the definition
 
 
+class RatioDef(BaseModel):
+    """A rate built from two declared metrics — cost per tonne, extraction
+    rate, yield per hectare. Both sides are compared on the same months, so
+    the actual rate meets the rate the plan implied rather than an average
+    of monthly rates."""
+
+    model_config = ConfigDict(extra="forbid")
+    numerator: str                   # a key in `metrics`
+    denominator: str                 # a key in `metrics`
+    unit: Unit = "USD/t"
+    lower_is_better: bool = True     # a cost per tonne, not a yield
+    definition: Text | None = None
+    methodology: Text | None = None
+    owner: str | None = None
+
+
 class ContextIn(BaseModel):
     """What the author saves: the client's parsing knowledge.
 
@@ -311,6 +327,7 @@ class ContextIn(BaseModel):
     modules: list[str] = ["movements"]   # named analyses run on every ingest
     reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
     metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
+    ratios: dict[str, RatioDef] = {}     # rates between two metrics
     journal_code_column: str | None = None  # header of the routing-code column ("CODE")
     retain_files: bool = True            # keep the workbooks so questions can be asked of them
 

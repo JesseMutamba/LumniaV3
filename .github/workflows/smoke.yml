@@ -31,3 +31,24 @@ jobs:
           grep -o "<title>[^<]*</title>" page.html || true
           test "$code" = "200"
           grep -qi "lumnia" page.html
+          echo "asset bundle served:"
+          grep -o 'assets/index-[^"]*\.js' page.html | head -1
+      - name: The deployed build is the current one
+        run: |
+          # "It looks the same" is usually a stale deploy or a cached page.
+          # Assert against the API's own route list, which cannot be cached
+          # by a browser: the ask surface exists only in the current build.
+          curl -sS -m 30 https://lumnia-api-lkfg.onrender.com/openapi.json -o api.json
+          python3 - <<'PY'
+          import json, sys
+          spec = json.load(open("api.json"))
+          paths = set(spec.get("paths", {}))
+          want = ["/v1/studio/ask", "/v1/studio/orgs/{org_id}/tiles",
+                  "/v1/studio/orgs/{org_id}/timeline", "/v1/studio/dashboard"]
+          missing = [p for p in want if p not in paths]
+          if missing:
+              print("stale deploy - missing routes:", missing)
+              print("deployed routes:", sorted(paths))
+              sys.exit(1)
+          print("current build deployed; ask surface live")
+          PY
