@@ -19,9 +19,10 @@ from .. import store
 from ..auth import require_author
 from ..pipeline.checks import detect_rollup_hierarchy
 from ..pipeline.ingest import read_workbook
+from ..pipeline.modules import DEFAULT_MODULES, MODULES, run_modules
 from ..pipeline.parse import build_draft, detect_tables
 from ..pipeline.recur import diff, snapshot
-from ..schema import Flag, Report, Source, Text
+from ..schema import Prose, Report, Source, Text
 
 router = APIRouter()
 author = Depends(require_author)
@@ -86,6 +87,7 @@ class Inventory(BaseModel):
     tables: list[TableInfo] = []
     draft: Report | None = None
     ingestion: IngestionDelta | None = None
+    modules_run: list[str] = []
 
 
 @router.post(
@@ -170,37 +172,39 @@ async def ingest(file: UploadFile = File(...), org: str = Query(default="client"
     # for this client before, answer "what moved" — alerts beyond the
     # client's threshold, structural changes as notes.
     ingestion = None
+    delta_raw = None
     if detected and store.get_org(org):
         snap = snapshot(wb, detected)
         prev = store.last_ingestion(org, wb.source.filename)
         seq = store.put_ingestion(org, wb.source.filename, wb.source.sha256, snap)
         if prev:
             threshold = ctx.alert_threshold_pct if ctx else 20.0
-            d = diff(prev["summary"], snap, threshold)
-            ingestion = IngestionDelta(seq=seq, previous_ts=prev["ts"], **d)
-            if ingestion.alerts and draft:
-                # The movements go into the draft as a flag the author reviews
-                # — narrated deltas, not values, because a delta is commentary
-                # on two workbooks, not a figure from one.
-                lines = "; ".join(
-                    f"{a.sheet} · {a.label} · {a.column} : {a.before:g} → {a.after:g}"
-                    + (f" ({a.pct:+.1f} %)" if a.pct is not None else "")
-                    for a in ingestion.alerts[:8]
-                )
-                draft.blocks.insert(
-                    1,
-                    Flag(
-                        severity="warn",
-                        tag=Text(fr="Mouvement détecté", en="Movement detected"),
-                        title=Text(
-                            fr=f"{len(ingestion.alerts)} valeur(s) ont bougé depuis l'ingestion précédente",
-                            en=f"{len(ingestion.alerts)} value(s) moved since the previous ingest",
-                        ),
-                        body=Text(fr=lines),
-                    ),
-                )
+            delta_raw = diff(prev["summary"], snap, threshold)
+            ingestion = IngestionDelta(seq=seq, previous_ts=prev["ts"], **delta_raw)
         else:
             ingestion = IngestionDelta(seq=seq)
+
+    # Named analysis modules: the client's context says which analyses run
+    # on every ingest. Their blocks join the draft ahead of the ledger, each
+    # figure carrying provenance like any other.
+    modules_run: list[str] = []
+    if draft:
+        names = ctx.modules if ctx else DEFAULT_MODULES
+        blocks, modules_run = run_modules(
+            names, wb, detected, ctx, {"delta": delta_raw}
+        )
+        if blocks:
+            draft.blocks[1:1] = blocks
+        if modules_run:
+            draft.blocks.insert(
+                1,
+                Prose(
+                    text=Text(
+                        fr="Modules exécutés : " + " · ".join(modules_run) + ".",
+                        en="Modules run: " + " · ".join(modules_run) + ".",
+                    )
+                ),
+            )
 
     return Inventory(
         source=wb.source,
@@ -220,7 +224,35 @@ async def ingest(file: UploadFile = File(...), org: str = Query(default="client"
         ],
         draft=draft,
         ingestion=ingestion,
+        modules_run=modules_run,
     )
+
+
+class ModuleInfo(BaseModel):
+    name: str
+    version: str
+    description_fr: str
+    description_en: str
+
+
+@router.get(
+    "/studio/modules",
+    response_model=list[ModuleInfo],
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_modules():
+    """The registry: every named analysis this platform can run. Enable them
+    per client in the context document."""
+    return [
+        ModuleInfo(
+            name=m.name,
+            version=m.version,
+            description_fr=m.description_fr,
+            description_en=m.description_en,
+        )
+        for m in MODULES.values()
+    ]
 
 
 @router.get(

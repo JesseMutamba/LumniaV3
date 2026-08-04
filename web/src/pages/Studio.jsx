@@ -226,6 +226,13 @@ export default function Studio({ locale, onPublished }) {
                   : 'No tables detected — the workbook may be empty or never recalculated by Excel.'}
               </div>
             )}
+            {inv.modules_run?.length > 0 && (
+              <div className="det-row">
+                <span className="det-dim">
+                  {L ? 'modules' : 'modules'} : {inv.modules_run.join(' · ')}
+                </span>
+              </div>
+            )}
             {inv.ingestion && (
               <div className="delta">
                 <div className="delta-h">

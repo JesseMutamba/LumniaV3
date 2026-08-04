@@ -266,6 +266,8 @@ class ContextIn(BaseModel):
     aliases: dict[str, str] = {}         # label as written -> canonical label
     exclude_labels: list[str] = []       # rows whose label matches are dropped
     alert_threshold_pct: float = Field(default=20.0, ge=0)  # re-ingest movement alert
+    modules: list[str] = ["movements"]   # named analyses run on every ingest
+    reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
 
 
 class Context(ContextIn):

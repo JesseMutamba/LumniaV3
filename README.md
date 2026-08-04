@@ -100,6 +100,20 @@ ahead of the client.
 | CH-003 | An implied unit price that silently changes between periods. |
 | CH-004 | Any value that reached a report without a source cell. |
 
+## Named analysis modules
+
+The analyses clients need repeatedly, packaged with fixed definitions and
+enabled per client in their context document (`modules: [...]`):
+
+| Module | Does |
+|---|---|
+| `movements` | What moved since the previous ingest of the same file, beyond the client's alert threshold. |
+| `execution` | Budget vs actual per line, total as a **ratio of totals** — never an average of ratios. |
+| `reconciliation` | Same date + same amount in two cash journals: the same money counted twice. `reconcile_sheets` in the context names the journals. |
+
+A module version is a definition: `execution v1.0` computes the same thing
+for every client, every month. Registry at `/v1/studio/modules`.
+
 ## Known gaps
 
 - **Layer 02 (parse & normalize) is a first slice.** `POST /v1/studio/ingest`

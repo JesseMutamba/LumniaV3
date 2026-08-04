@@ -446,3 +446,68 @@ def test_alert_threshold_comes_from_the_context(client, auth):
     changed["budget"][2] = ["Engrais", 8000, 8200]   # +1.2% — alerts at 1%
     d = _ingest(client, auth, changed, org="sens").json()["ingestion"]
     assert any(a["label"] == "Engrais" for a in d["alerts"])
+
+
+# ------------------------------------------------------ analysis modules ---
+
+def test_module_registry_lists_named_analyses(client, auth):
+    mods = client.get("/v1/studio/modules", headers=auth).json()
+    names = {m["name"] for m in mods}
+    assert {"movements", "execution", "reconciliation"} <= names
+    assert all(m["version"] for m in mods)
+
+
+def test_context_rejects_unknown_module(client, auth, org):
+    r = client.put(f"/v1/studio/orgs/{org}/context",
+                   json={"modules": ["movements", "sorcery"]}, headers=auth)
+    assert r.status_code == 422 and "sorcery" in r.json()["detail"]
+
+
+def test_execution_module_uses_ratio_of_totals(client, auth):
+    client.post("/v1/orgs", json={"id": "exe", "name": "Exe", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/exe/context",
+               json={"modules": ["execution"]}, headers=auth)
+    body = _ingest(client, auth, {
+        "opex": [
+            ["Poste", "Budget USD", "Réel USD"],
+            ["Janvier", 1000, 387],     # per-line rates: 38.7%, 147.4%, 107.0%
+            ["Février", 1000, 1474],    # mean of ratios would be 97.7%
+            ["Mars", 1000, 1070],       # ratio of totals is 97.7%... use uneven budgets
+        ]
+    }, org="exe").json()
+    assert any(m.startswith("execution") for m in body["modules_run"])
+    kpi = next(b for b in body["draft"]["blocks"] if b["type"] == "kpiGrid"
+               and "Exécution" in b["items"][0]["label"]["fr"])
+    v = kpi["items"][0]["value"]
+    assert v["derived"] == "ratio" and v["unit"] == "pct"
+    assert v["n"] == pytest.approx((387 + 1474 + 1070) / 3000 * 100, abs=0.1)
+    assert v["src"]["cells"] == "C2:C4"      # provenance: the actual column
+    rail = next(b for b in body["draft"]["blocks"] if b["type"] == "rail")
+    assert len(rail["rows"]) == 3
+    assert rail["rows"][0]["actual"]["src"]["cells"] == "C2"
+
+
+def test_reconciliation_module_finds_the_double_count(client, auth):
+    from datetime import date as D
+    client.post("/v1/orgs", json={"id": "rec2", "name": "Rec2", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/rec2/context",
+               json={"modules": ["reconciliation"]}, headers=auth)
+    site = [["Date", "Libellé", "Sorties USD"],
+            [D(2026, 2, 16), "acompte Indigo", 45600],
+            [D(2026, 3, 5), "carburant", 1200],
+            [D(2026, 3, 9), "salaires", 14751]]
+    hq = [["Date", "Libellé", "Montant USD"],
+          [D(2026, 2, 16), "Indigo seeds", 45600],       # duplicate
+          [D(2026, 3, 9), "quinzaine RH", 14751],        # duplicate
+          [D(2026, 3, 20), "frais bancaires", 300]]
+    body = _ingest(client, auth, {"JC Site": site, "JC DGO": hq}, org="rec2").json()
+    assert any(m.startswith("reconciliation") for m in body["modules_run"])
+    flag = next(b for b in body["draft"]["blocks"] if b["type"] == "flag")
+    assert "2" in flag["title"]["fr"] and "journaux" in flag["title"]["fr"]
+    recon = next(b for b in body["draft"]["blocks"] if b["type"] == "table"
+                 and b["columns"][0]["key"] == "date")
+    amounts = {r["amount"]["n"] for r in recon["rows"]}
+    assert amounts == {45600.0, 14751.0}
+    assert all(r["amount"]["src"]["cells"] for r in recon["rows"])

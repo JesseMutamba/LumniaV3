@@ -293,8 +293,15 @@ def get_org_context(org_id: str):
 def save_org_context(org_id: str, body: ContextIn):
     """Append a new version. Never overwrites — a definition change stays
     visible, and reverting is saving an old document again."""
+    from ..pipeline.modules import MODULES
+
     if not store.get_org(org_id):
         raise HTTPException(404, f"Unknown org: {org_id}")
+    unknown = [m for m in body.modules if m not in MODULES]
+    if unknown:
+        raise HTTPException(
+            422, f"Unknown module(s): {unknown}. Available: {sorted(MODULES)}"
+        )
     return store.put_context(org_id, body)
 
 
