@@ -81,8 +81,11 @@ const Rail = ({ b, locale, sources }) => (
               </div>
             </div>
             <div className="bar">
-              <div className="env" />
               <div className="fill" style={{ width: `${wA}%` }} />
+              <div
+                className="env"
+                style={{ left: `${wA}%`, width: `${Math.max(0, wP - wA)}%` }}
+              />
               <div className="notch" style={{ left: `${wP}%` }} />
               <div className="pct">{nf((r.actual.n / r.pace.n) * 100, locale, 1)} %</div>
             </div>
@@ -119,10 +122,21 @@ function BarPair({ b, locale, sources }) {
             {t(b.title, locale)}
             <Prov src={plan?.values?.[0]?.src} sources={sources} />
           </span>
-          <span>{t(b.sub, locale)}</span>
+          <span className="key">
+            <i>
+              <span className="sw plan" />
+              {t(plan?.label, locale) || 'Budget'}
+            </i>
+            {act && (
+              <i>
+                <span className="sw actg" />
+                {t(act.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')}
+              </i>
+            )}
+          </span>
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t(b.title, locale)}>
-          {[0, 1, 2, 3, 4].map((i) => {
+          {[1, 2, 3, 4].map((i) => {
             const v = (max * i) / 4
             return (
               <g key={i}>
@@ -133,6 +147,10 @@ function BarPair({ b, locale, sources }) {
               </g>
             )
           })}
+          <line className="base" x1={P.l} x2={W - P.r} y1={P.t + ih} y2={P.t + ih} />
+          <text className="ax" x={P.l - 8} y={P.t + ih + 3.5} textAnchor="end">
+            {lab(0)}
+          </text>
           {x.map((m, i) => {
             const x0 = P.l + i * bw + gap / 2
             const p = plan?.values[i]?.n
@@ -140,10 +158,14 @@ function BarPair({ b, locale, sources }) {
             return (
               <g key={m + i}>
                 {p !== undefined && (
-                  <rect x={x0} y={y(p)} width={w} height={Math.max(0, P.t + ih - y(p))} className="bar-plan" />
+                  <rect x={x0} y={y(p)} width={w} height={Math.max(0, P.t + ih - y(p))} className="bar-plan">
+                    <title>{`${m} · ${t(plan?.label, locale) || 'Budget'} : ${nf(p, locale)}`}</title>
+                  </rect>
                 )}
                 {a !== undefined && (
-                  <rect x={x0 + w} y={y(a)} width={w} height={Math.max(0, P.t + ih - y(a))} className="bar-act" />
+                  <rect x={x0 + w} y={y(a)} width={w} height={Math.max(0, P.t + ih - y(a))} className="bar-act">
+                    <title>{`${m} · ${t(act?.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')} : ${nf(a, locale)}`}</title>
+                  </rect>
                 )}
                 <text className="ax" x={P.l + i * bw + bw / 2} y={H - 8} textAnchor="middle">
                   {m}
@@ -160,7 +182,7 @@ function BarPair({ b, locale, sources }) {
                 y1={P.t - 6}
                 y2={P.t + ih}
               />
-              <text className="ax" x={P.l + b.cutoff * bw + 7} y={P.t - 2}>
+              <text className="cut-t" x={P.l + b.cutoff * bw + 7} y={P.t - 2}>
                 {locale === 'fr' ? 'fin des réels' : 'end of actuals'}
               </text>
             </g>
@@ -287,18 +309,25 @@ const Ledger = ({ locale, sources }) => {
             <span key={x}>{x}</span>
           ))}
         </div>
-        {sources.map((s) => (
-          <div className="lg-r" key={s.idx}>
-            <span className="f" title={s.filename}>
-              {s.filename}
-            </span>
-            <span>{s.sheets}</span>
-            <span>{nf(s.rows_read, locale)}</span>
-            <span className="ok">
-              {s.checks_passed}/{s.checks_run} {locale === 'fr' ? 'OK' : 'pass'}
-            </span>
-          </div>
-        ))}
+        {sources.map((s) => {
+          const failed = s.checks_run > 0 && s.checks_passed < s.checks_run
+          return (
+            <div className="lg-r" key={s.idx}>
+              <span className="f" title={s.filename}>
+                {s.filename}
+              </span>
+              <span>{s.sheets}</span>
+              <span>{nf(s.rows_read, locale)}</span>
+              <span className={failed ? 'ko' : 'ok'}>
+                {s.checks_run === 0
+                  ? locale === 'fr' ? 'aucun contrôle' : 'no checks'
+                  : failed
+                    ? `${s.checks_run - s.checks_passed}/${s.checks_run} ${locale === 'fr' ? 'en échec' : 'failing'}`
+                    : `${s.checks_passed}/${s.checks_run} OK`}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

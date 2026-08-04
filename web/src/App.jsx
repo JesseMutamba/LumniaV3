@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import Block from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
+import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import * as api from './lib/api.js'
 import { t } from './lib/format.js'
+import mark from './assets/lumnia-mark.png'
 
 /**
  * Two surfaces, one build.
@@ -21,6 +23,8 @@ function parseHash() {
   const q = new URLSearchParams(qs || '')
   const m = path.match(/^\/r\/([^/?]+)/)
   if (m) return { view: 'report', id: decodeURIComponent(m[1]), key: q.get('k') }
+  const c = path.match(/^\/c\/([^/?]+)/)
+  if (c) return { view: 'portal', id: decodeURIComponent(c[1]), key: q.get('k') }
   if (path.startsWith('/studio')) return { view: 'studio' }
   return { view: 'home' }
 }
@@ -35,15 +39,21 @@ export default function App() {
     return () => removeEventListener('hashchange', on)
   }, [])
 
+  // The page must tell the truth about its language, or Chrome's
+  // auto-translate rewrites the report — filenames included.
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
   return (
     <div className="shell">
       <div className="top">
         <a className="brand" href="#/">
-          <span className="dot" />
-          Lumnia
+          <img src={mark} alt="" />
+          <span>Lumnia</span>
         </a>
         <div className="grow" />
-        {route.view !== 'report' && (
+        {route.view !== 'report' && route.view !== 'portal' && (
           <a className="tbtn" href={route.view === 'studio' ? '#/' : '#/studio'}>
             {route.view === 'studio' ? (locale === 'fr' ? 'accueil' : 'home') : 'studio'}
           </a>
@@ -59,6 +69,9 @@ export default function App() {
 
       {route.view === 'report' && (
         <Viewer id={route.id} shareKey={route.key} locale={locale} />
+      )}
+      {route.view === 'portal' && (
+        <PortalPage id={route.id} shareKey={route.key} locale={locale} />
       )}
       {route.view === 'studio' && <Studio locale={locale} />}
       {route.view === 'home' && <Home locale={locale} />}
@@ -76,6 +89,7 @@ function Home({ locale }) {
   const L = locale === 'fr'
   return (
     <div className="home">
+      <img className="mark" src={mark} alt="Lumnia" />
       <h1>
         {L ? 'Intelligence opérationnelle vérifiée' : 'Verified operating intelligence'}
       </h1>
@@ -87,18 +101,99 @@ function Home({ locale }) {
       <div className="status">
         {h?.ok ? (
           <>
-            <span className="ok">●</span> API {h.version} · {h.orgs}{' '}
-            {L ? 'clients' : 'clients'} · {h.reports} {L ? 'rapports' : 'reports'}
+            <span className="dot" />
+            <span>API {h.version}</span>
+            <span>·</span>
+            <span>
+              {h.orgs} {L ? 'clients' : 'clients'}
+            </span>
+            <span>·</span>
+            <span>
+              {h.reports} {L ? 'rapports' : 'reports'}
+            </span>
             {!h.publishing_enabled && (
-              <span className="warn">
-                {' '}
-                · {L ? 'publication désactivée' : 'publishing disabled'}
-              </span>
+              <>
+                <span>·</span>
+                <span className="warn">
+                  {L ? 'publication désactivée' : 'publishing disabled'}
+                </span>
+              </>
             )}
           </>
         ) : (
-          <span className="warn">● {L ? "l'API ne répond pas" : 'API not responding'}</span>
+          <span className="warn">{L ? "l'API ne répond pas" : 'API not responding'}</span>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- portal */
+
+function PortalPage({ id, shareKey, locale }) {
+  const [portal, setPortal] = useState(null)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    setPortal(null)
+    setErr(null)
+    api.getPortal(id, shareKey).then(setPortal).catch(setErr)
+  }, [id, shareKey])
+
+  const L = locale === 'fr'
+
+  if (err)
+    return (
+      <div className="doc">
+        <div className="gone">
+          <div className="ic">⌖</div>
+          <h2>{L ? 'Lien introuvable ou expiré' : 'Link not found or expired'}</h2>
+          <p>
+            {L
+              ? 'Vérifiez le lien complet, y compris la clé après « ?k= ».'
+              : 'Check the full link, including the key after “?k=”.'}
+          </p>
+        </div>
+      </div>
+    )
+
+  if (!portal) return <div className="doc skel">…</div>
+
+  return (
+    <div className="doc">
+      <div className="rep-head">
+        <h1>{portal.org.name}</h1>
+        <div className="meta">
+          <span className="chip">{t(portal.org.sub, locale)}</span>
+        </div>
+      </div>
+
+      <div className="b-label">{L ? 'Rapports' : 'Reports'}</div>
+      {portal.reports.length === 0 && (
+        <p className="b-prose">
+          {L
+            ? 'Aucun rapport publié pour le moment. Celui-ci apparaîtra ici dès sa publication.'
+            : 'No reports published yet. The first one will appear here the moment it is.'}
+        </p>
+      )}
+      <div className="pl">
+        {portal.reports.map((r) => (
+          <a key={r.id} className="pl-row" href={`#/r/${r.id}?k=${r.share_key}`}>
+            <span className="pl-t">{t(r.title, locale)}</span>
+            <span className="pl-m">{t(r.period.label, locale)}</span>
+            <span className="pl-m">{String(r.generated_at ?? '').slice(0, 10)}</span>
+            <span className="pl-a">→</span>
+          </a>
+        ))}
+      </div>
+
+      <div className="foot">
+        <div className="rule">
+          {L
+            ? "Chaque chiffre de ces rapports porte l'adresse de la cellule dont il provient."
+            : 'Every figure in these reports carries the address of the cell it came from.'}
+        </div>
+        <div className="sig">Lumnia</div>
       </div>
     </div>
   )
@@ -109,12 +204,22 @@ function Home({ locale }) {
 function Viewer({ id, shareKey, locale }) {
   const [rep, setRep] = useState(null)
   const [err, setErr] = useState(null)
+  const [lens, setLens] = useState('doc')
 
   useEffect(() => {
     setRep(null)
     setErr(null)
+    setLens('doc')
     api.getReport(id, shareKey).then(setRep).catch(setErr)
   }, [id, shareKey])
+
+  // Tabs, bookmarks and shared links deserve the report's name, not ours.
+  useEffect(() => {
+    if (rep) document.title = `${t(rep.title, locale)} · Lumnia`
+    return () => {
+      document.title = 'Lumnia'
+    }
+  }, [rep, locale])
 
   const L = locale === 'fr'
 
@@ -160,9 +265,31 @@ function Viewer({ id, shareKey, locale }) {
         </div>
       </div>
 
-      {rep.blocks.map((b, i) => (
-        <Block key={i} b={b} locale={locale} sources={rep.sources} />
-      ))}
+      {hasDashboard(rep) && (
+        <div className="lens" role="tablist" aria-label={L ? 'Vue' : 'View'}>
+          {[
+            ['doc', L ? 'Document' : 'Document'],
+            ['dash', L ? 'Tableau de bord' : 'Dashboard'],
+          ].map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={lens === k}
+              onClick={() => setLens(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {lens === 'dash' && hasDashboard(rep) ? (
+        <Dashboard rep={rep} locale={locale} />
+      ) : (
+        rep.blocks.map((b, i) => (
+          <Block key={i} b={b} locale={locale} sources={rep.sources} />
+        ))
+      )}
 
       <div className="foot">
         <div className="rule">
@@ -170,7 +297,7 @@ function Viewer({ id, shareKey, locale }) {
             ? "Le code calcule, le langage raconte. Aucun indicateur ne s'affiche sans provenance jusqu'à une cellule source."
             : 'Code computes, language narrates. No metric renders without provenance to a source cell.'}
         </div>
-        Lumnia · pipeline {rep.pipeline_version}
+        <div className="sig">Lumnia · pipeline {rep.pipeline_version}</div>
       </div>
     </div>
   )

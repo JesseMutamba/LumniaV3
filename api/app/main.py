@@ -42,6 +42,18 @@ app.include_router(reports.router, prefix="/v1")
 app.include_router(ingest.router, prefix="/v1")
 
 
+@app.get("/", include_in_schema=False)
+def root():
+    """The API has no pages — point a stray visitor somewhere useful."""
+    return {
+        "service": "lumnia-api",
+        "version": VERSION,
+        "site": os.getenv("LUMNIA_SITE", "https://jessemutamba.github.io/LumniaV3/"),
+        "health": "/v1/health",
+        "docs": "/docs",
+    }
+
+
 @app.get("/v1/health", tags=["meta"])
 def health():
     return {

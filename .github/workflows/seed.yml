@@ -1,0 +1,61 @@
+# Seeds the live platform: creates the PVAK client and publishes the template
+# report. Idempotent — re-running keeps the existing share key. Requires the
+# LUMNIA_ADMIN_TOKEN repository secret (Settings > Secrets and variables >
+# Actions); without it the job exits quietly so ordinary pushes never fail
+# on a missing secret.
+name: Seed first client and report
+
+# Re-runnable at any time — publishing the same report again is a no-op that
+# keeps its share key.
+on:
+  push:
+    branches: [claude/new-session-h91lyu, main]
+    paths:
+      - ".github/workflows/seed.yml"
+      - "api/templates/**"
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create client and publish template report
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "LUMNIA_ADMIN_TOKEN secret not set - skipping seed."
+            echo "Add it under Settings > Secrets and variables > Actions, then re-run."
+            exit 0
+          fi
+          # Render redeploys on the same push that triggers this workflow, so
+          # wait out the restart window before touching the API.
+          for i in $(seq 1 16); do
+            if curl -sS -m 20 "$API/health" | python3 -c "import sys,json;d=json.load(sys.stdin);exit(0 if d.get('ok') else 1)" 2>/dev/null; then
+              echo "api is up"; break
+            fi
+            echo "waiting for api ($i)"; sleep 15
+          done
+          # Create the client; a duplicate is fine, publishing below is the test.
+          curl -sS -X POST "$API/orgs" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"id":"pvak","name":"PVAK","sub":{"fr":"Mwebe & Kwenge, RDC","en":"Mwebe & Kwenge, DRC"}}' \
+            || true
+          echo
+          for i in 1 2 3; do
+            code=$(curl -sS -o out.json -w "%{http_code}" -X POST "$API/orgs/pvak/reports" \
+              -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+              --data-binary @api/templates/report.template.json)
+            echo "publish status: $code"
+            if [ "$code" = "200" ] || [ "$code" = "201" ]; then break; fi
+            sleep 20
+          done
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then cat out.json; exit 1; fi
+          # The share key is a bearer credential and these logs are public - mask it.
+          KEY=$(python3 -c "import json;print(json.load(open('out.json'))['share_key'])")
+          echo "::add-mask::$KEY"
+          echo "Published pvak-fy26-q1. Copy the share link from Studio (it holds the key)."
+          echo "Platform state now:"
+          curl -sS "$API/health"

@@ -17,11 +17,42 @@ export default function Studio({ locale, onPublished }) {
   const [err, setErr] = useState(null)
   const [result, setResult] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [copiedOrg, setCopiedOrg] = useState(null)
+  const [inv, setInv] = useState(null)
+  const [ctxOrg, setCtxOrg] = useState(null)
+  const [ctxText, setCtxText] = useState('')
+  const [ctxMeta, setCtxMeta] = useState(null)
+  const [ctxErr, setCtxErr] = useState(null)
+  const [reads, setReads] = useState(null)
+
+  useEffect(() => {
+    setReads(null)
+    if (result) api.reportReads(result.id).then(setReads).catch(() => {})
+  }, [result])
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
+  const [dash, setDash] = useState([])
+  const [tlOrg, setTlOrg] = useState(null)
+  const [timeline, setTimeline] = useState([])
+
+  async function openTimeline(id) {
+    if (tlOrg === id) {
+      setTlOrg(null)
+      return
+    }
+    setTlOrg(id)
+    setTimeline([])
+    api.getTimeline(id).then(setTimeline).catch(() => {})
+  }
+
   const L = locale === 'fr'
-  const refresh = () => api.listOrgs().then(setOrgs).catch(() => {})
-  useEffect(refresh, [])
+  const refresh = () => {
+    if (api.hasToken()) {
+      api.listStudioOrgs().then(setOrgs).catch(() => {})
+      api.getDashboard().then(setDash).catch(() => {})
+    }
+  }
+  useEffect(() => { refresh() }, [token])
 
   function saveToken(v) {
     api.setToken(v.trim())
@@ -70,6 +101,64 @@ export default function Studio({ locale, onPublished }) {
     }
   }
 
+  async function analyse(e) {
+    const fs = [...(e.target.files || [])]
+    e.target.value = ''
+    if (!fs.length) return
+    const r = await run(() => api.ingestWorkbook(fs, orgs[0]?.id))
+    if (r) setInv(r)
+  }
+
+  const CTX_TEMPLATE = {
+    ignore_sheets: [],
+    units: {},
+    aliases: {},
+    exclude_labels: [],
+  }
+  const editable = (c) => {
+    const { version, updated_at, ...doc } = c
+    return doc
+  }
+
+  async function openContext(o) {
+    if (ctxOrg === o.id) {
+      setCtxOrg(null)
+      return
+    }
+    setCtxOrg(o.id)
+    setCtxErr(null)
+    const c = await run(() => api.getOrgContext(o.id))
+    setCtxMeta(c ? { version: c.version, updated_at: c.updated_at } : null)
+    setCtxText(JSON.stringify(c ? editable(c) : CTX_TEMPLATE, null, 2))
+  }
+
+  async function saveContext() {
+    setCtxErr(null)
+    let body
+    try {
+      body = JSON.parse(ctxText)
+    } catch (e) {
+      setCtxErr(L ? `JSON invalide : ${e.message}` : `Invalid JSON: ${e.message}`)
+      return
+    }
+    const c = await run(() => api.saveOrgContext(ctxOrg, body))
+    if (c) {
+      setCtxMeta({ version: c.version, updated_at: c.updated_at })
+      setCtxText(JSON.stringify(editable(c), null, 2))
+    }
+  }
+
+  function downloadDraft() {
+    const blob = new Blob([JSON.stringify(inv.draft, null, 2)], {
+      type: 'application/json',
+    })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${inv.draft.id}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   async function rotate() {
     const rep = await run(() => api.rotateKey(result.id))
     if (rep) {
@@ -112,15 +201,200 @@ export default function Studio({ locale, onPublished }) {
         </button>
       </div>
 
-      {/* ---------------------------------------------------------- publish */}
+      {/* --------------------------------------------------------- overview */}
+      {dash.length > 0 && (
+        <section className="panel">
+          <div className="panel-h">
+            {L ? "00 · Vue d'ensemble" : '00 · Overview'}
+          </div>
+          <div className="dash">
+            {dash.map((d) => (
+              <div key={d.id} className="dash-row">
+                <span className="dash-name">
+                  {d.name} <span className="mono muted">{d.id}</span>
+                </span>
+                <span className="dash-cell">
+                  {d.published} {L ? 'publié(s)' : 'published'}
+                  {d.unpublished > 0 &&
+                    ` · ${d.unpublished} ${L ? 'brouillon(s)' : 'draft(s)'}`}
+                </span>
+                <span className="dash-cell">
+                  {d.reads} {L ? 'lecture(s)' : 'read(s)'}
+                  {d.last_read && ` · ${String(d.last_read).slice(0, 10)}`}
+                  {d.refused > 0 && (
+                    <span className="dash-bad">
+                      {' '}· {d.refused} {L ? 'refusée(s)' : 'refused'}
+                    </span>
+                  )}
+                </span>
+                <span className="dash-cell">
+                  {d.last_ingest
+                    ? `${L ? 'ingéré le' : 'ingested'} ${String(d.last_ingest).slice(0, 10)} · ${d.files_tracked} ${L ? 'fichier(s)' : 'file(s)'}`
+                    : L ? 'jamais ingéré' : 'never ingested'}
+                </span>
+                <span className="dash-cell">
+                  {d.context_version
+                    ? `${L ? 'contexte' : 'context'} v${d.context_version}${d.modules.length ? ` · ${d.modules.join(' · ')}` : ''}`
+                    : L ? 'sans contexte' : 'no context'}
+                </span>
+                <button className="link" onClick={() => openTimeline(d.id)}>
+                  {tlOrg === d.id
+                    ? L ? 'fermer' : 'close'
+                    : L ? 'chronologie' : 'timeline'}
+                </button>
+                {tlOrg === d.id && (
+                  <div className="tl">
+                    {timeline.length === 0 && (
+                      <div className="tl-row">
+                        <span className="muted">
+                          {L
+                            ? 'Aucune analyse pour ce client — chaque passage au panneau 01 laisse une ligne ici.'
+                            : 'No analyse runs for this client yet — every pass through panel 01 leaves a row here.'}
+                        </span>
+                      </div>
+                    )}
+                    {timeline.map((run, i) => (
+                      <div className="tl-row" key={i}>
+                        <span className="tl-ts">{String(run.ts).slice(0, 10)}</span>
+                        <span className="tl-facts">
+                          {run.facts
+                            .filter((f) => f.n != null)
+                            .map((f, j) => (
+                              <span className="tl-fact" key={j} data-tone={f.tone || 'neutral'}>
+                                {f.label} ={' '}
+                                {f.n}
+                                {f.unit === 'pct' ? ' %' : ''}
+                              </span>
+                            ))}
+                          {run.facts.filter((f) => f.n != null).length === 0 &&
+                            (L ? 'aucun fait chiffré' : 'no numeric facts')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="fine">
+            {L
+              ? 'Une ligne par client : rapports sortis, lectures entrées, dernière ingestion, contexte appliqué.'
+              : 'One row per client: reports out, reads in, last ingest, context applied.'}
+          </p>
+        </section>
+      )}
+
+      {/* ---------------------------------------------------------- analyse */}
       <section className="panel">
         <div className="panel-h">
-          {L ? '01 · Publier un rapport' : '01 · Publish a report'}
+          {L ? '01 · Analyser un classeur' : '01 · Analyse a workbook'}
         </div>
         <p>
           {L
-            ? 'Déposez un document de rapport (.json). Il est validé contre le schéma et contre CH-004 — toute valeur sans cellule source est refusée avant enregistrement.'
-            : 'Drop a report document (.json). It is validated against the schema and against CH-004 — any value without a source cell is refused before it is stored.'}
+            ? 'Déposez un ou plusieurs classeurs (.xlsx) — budget et réel côte à côte. La machine détecte les tableaux, exécute les modules du contexte, et écrit un brouillon où chaque valeur porte sa cellule et son fichier source.'
+            : 'Drop one or several workbooks (.xlsx) — budget and actuals side by side. The machine detects the tables, runs the context’s modules, and writes a draft in which every value carries its source cell and file.'}
+        </p>
+        <label className="drop">
+          <input type="file" accept=".xlsx,.xlsm" multiple onChange={analyse} hidden />
+          {busy
+            ? L ? 'Analyse…' : 'Analysing…'
+            : L ? 'Choisir un ou des classeurs .xlsx' : 'Choose .xlsx workbook(s)'}
+        </label>
+        {inv && (
+          <div className="det">
+            {inv.tables.map((t, i) => (
+              <div className="det-row" key={i}>
+                <span className="det-loc">
+                  {t.sheet}!{t.cells}
+                </span>
+                <span className="det-dim">
+                  {t.rows}×{t.cols}
+                  {t.notes.length > 0 && ` · ${t.notes.join(' · ')}`}
+                </span>
+                <span
+                  className="det-conf"
+                  data-band={t.confidence >= 0.8 ? 'high' : t.confidence >= 0.5 ? 'mid' : 'low'}
+                >
+                  {Math.round(t.confidence * 100)} %
+                </span>
+              </div>
+            ))}
+            {inv.tables.length === 0 && (
+              <div className="note">
+                {L
+                  ? 'Aucun tableau détecté — le classeur est peut-être vide ou jamais recalculé par Excel.'
+                  : 'No tables detected — the workbook may be empty or never recalculated by Excel.'}
+              </div>
+            )}
+            {inv.modules_run?.length > 0 && (
+              <div className="det-row">
+                <span className="det-dim">
+                  {L ? 'modules' : 'modules'} : {inv.modules_run.join(' · ')}
+                </span>
+              </div>
+            )}
+            {inv.ingestion && (
+              <div className="delta">
+                <div className="delta-h">
+                  {L ? 'ingestion' : 'ingest'} #{inv.ingestion.seq}
+                  {inv.ingestion.previous_ts &&
+                    ` · ${L ? 'précédente le' : 'previous on'} ${String(inv.ingestion.previous_ts).slice(0, 10)}`}
+                  {inv.ingestion.seq > 1 &&
+                    inv.ingestion.changes.length === 0 &&
+                    inv.ingestion.notes.length === 0 &&
+                    ` · ${L ? 'aucun changement' : 'no changes'}`}
+                </div>
+                {inv.ingestion.alerts.map((a, i) => (
+                  <div className="delta-row alert" key={i}>
+                    <span>
+                      {a.sheet} · {a.label} · {a.column}
+                    </span>
+                    <span>
+                      {a.before} → {a.after}
+                      {a.pct != null && ` (${a.pct > 0 ? '+' : ''}${a.pct} %)`}
+                    </span>
+                  </div>
+                ))}
+                {inv.ingestion.changes.length > inv.ingestion.alerts.length && (
+                  <div className="delta-row">
+                    <span>
+                      {inv.ingestion.changes.length - inv.ingestion.alerts.length}{' '}
+                      {L ? 'autre(s) changement(s) sous le seuil' : 'other change(s) below the threshold'}
+                    </span>
+                  </div>
+                )}
+                {inv.ingestion.notes.map((n, i) => (
+                  <div className="delta-row" key={`n${i}`}>
+                    <span>{n}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {inv.draft && (
+              <>
+                <button className="drop det-dl" onClick={downloadDraft}>
+                  {L ? 'télécharger le brouillon .json' : 'download the draft .json'}
+                </button>
+                <p className="fine">
+                  {L
+                    ? 'Relisez le brouillon — intitulés, unités, lignes — puis publiez-le au panneau 02.'
+                    : 'Review the draft — labels, units, rows — then publish it in panel 02.'}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------------------------------------------------- publish */}
+      <section className="panel">
+        <div className="panel-h">
+          {L ? '02 · Publier un rapport' : '02 · Publish a report'}
+        </div>
+        <p>
+          {L
+            ? 'Déposez un document de rapport (.json) — écrit à la main ou issu du panneau 01, même règle : validé contre le schéma et contre CH-004, toute valeur sans cellule source est refusée avant enregistrement.'
+            : 'Drop a report document (.json) — hand-written or from panel 01, same rule: validated against the schema and CH-004, any value without a source cell is refused before it is stored.'}
         </p>
         <label className="drop">
           <input type="file" accept=".json,application/json" onChange={upload} hidden />
@@ -132,6 +406,15 @@ export default function Studio({ locale, onPublished }) {
               ? 'Choisir un fichier .json'
               : 'Choose a .json file'}
         </label>
+        <p className="fine">
+          {L ? 'Pour rédiger à la main : ' : 'To write one by hand: '}
+          <a className="link" href="modele-rapport.json" download>
+            {L ? 'télécharger le modèle de rapport' : 'download the report template'}
+          </a>
+          {L
+            ? ' — bilingue, devises explicites, chaque valeur avec sa cellule. Remplacez les chiffres et les cellules par les vôtres, puis déposez-le ici.'
+            : ' — bilingual, explicit currencies, every value with its cell. Replace the figures and cells with yours, then drop it here.'}
+        </p>
         {orgs.length === 0 && (
           <div className="note">
             {L
@@ -152,7 +435,7 @@ export default function Studio({ locale, onPublished }) {
       {/* ------------------------------------------------------------ share */}
       {result && (
         <section className="panel ok">
-          <div className="panel-h">{L ? '02 · Lien à partager' : '02 · Share link'}</div>
+          <div className="panel-h">{L ? '03 · Lien à partager' : '03 · Share link'}</div>
           <div className="pub-title">
             {t(result.title, locale)} · {t(result.period.label, locale)} ·{' '}
             <span className="mono">{result.status}</span>
@@ -166,6 +449,23 @@ export default function Studio({ locale, onPublished }) {
               ? "Quiconque a ce lien peut lire ce rapport et rien d'autre. Aucun compte requis."
               : 'Anyone with this link can read this one report and nothing else. No account required.'}
           </p>
+          {reads && (
+            <div className="reads">
+              {reads.reads} {L ? 'lecture(s)' : 'read(s)'} · {reads.readers}{' '}
+              {L ? 'lecteur(s)' : 'reader(s)'}
+              {reads.last_read &&
+                ` · ${L ? 'dernière le' : 'last on'} ${String(reads.last_read).slice(0, 10)}`}
+              {reads.refused > 0 &&
+                ` · ${reads.refused} ${L ? 'tentative(s) refusée(s)' : 'refused attempt(s)'}`}
+              {'  '}
+              <button
+                className="link"
+                onClick={() => api.reportReads(result.id).then(setReads).catch(() => {})}
+              >
+                {L ? 'actualiser' : 'refresh'}
+              </button>
+            </div>
+          )}
           <div className="row-actions">
             <button className="link" onClick={rotate}>
               {L ? 'régénérer la clé' : 'rotate key'}
@@ -182,7 +482,7 @@ export default function Studio({ locale, onPublished }) {
 
       {/* ----------------------------------------------------------- clients */}
       <section className="panel">
-        <div className="panel-h">{L ? '03 · Clients' : '03 · Clients'}</div>
+        <div className="panel-h">{L ? '04 · Clients' : '04 · Clients'}</div>
         {orgs.length > 0 && (
           <div className="org-list">
             {orgs.map((o) => (
@@ -192,8 +492,57 @@ export default function Studio({ locale, onPublished }) {
                 <span className="muted">
                   {o.report_count} {L ? 'rapports' : 'reports'}
                 </span>
+                <button
+                  className="link"
+                  onClick={() => {
+                    navigator.clipboard.writeText(api.portalUrl(o))
+                    setCopiedOrg(o.id)
+                    setTimeout(() => setCopiedOrg(null), 2000)
+                  }}
+                >
+                  {copiedOrg === o.id
+                    ? L ? 'copié' : 'copied'
+                    : L ? 'lien portail' : 'portal link'}
+                </button>
+                <button className="link" onClick={() => openContext(o)}>
+                  {ctxOrg === o.id ? (L ? 'fermer' : 'close') : (L ? 'contexte' : 'context')}
+                </button>
               </div>
             ))}
+          </div>
+        )}
+        {ctxOrg && (
+          <div className="ctx">
+            <div className="ctx-h">
+              <span>
+                {L ? 'contexte' : 'context'} · {ctxOrg}
+              </span>
+              <span className="ctx-v">
+                {ctxMeta
+                  ? `v${ctxMeta.version} · ${String(ctxMeta.updated_at).slice(0, 10)}`
+                  : L
+                    ? 'aucun — v1 à la première sauvegarde'
+                    : 'none — v1 on first save'}
+              </span>
+            </div>
+            <textarea
+              className="ctx-t"
+              value={ctxText}
+              onChange={(e) => setCtxText(e.target.value)}
+              spellCheck={false}
+              rows={10}
+            />
+            <p className="hint">
+              {L
+                ? 'ignore_sheets : feuilles jamais lues · units : en-tête → unité (USD, CDF, t, ha, pct…) · aliases : libellé → libellé canonique · exclude_labels : lignes de totaux à écarter. Chaque sauvegarde crée une version — rien ne s’écrase.'
+                : 'ignore_sheets: sheets never read · units: header → unit (USD, CDF, t, ha, pct…) · aliases: label → canonical label · exclude_labels: total rows to drop. Every save creates a version — nothing is overwritten.'}
+            </p>
+            {ctxErr && <div className="note">{ctxErr}</div>}
+            <div className="row-actions">
+              <button className="gold-btn" onClick={saveContext} disabled={busy}>
+                {L ? 'sauvegarder' : 'save'}
+              </button>
+            </div>
           </div>
         )}
         <form className="org-form" onSubmit={addOrg}>

@@ -225,12 +225,104 @@ class ReportStub(BaseModel):
     pipeline_version: str
 
 
+class PortalReport(ReportStub):
+    """A stub plus the key that opens it. Only ever inside a portal payload —
+    the portal-key holder is entitled to read every published report here."""
+
+    share_key: str
+
+
+class Portal(BaseModel):
+    """What a stakeholder holding a client's portal link sees: the client and
+    its published reports, nothing else. There is no way to enumerate other
+    clients from here."""
+
+    model_config = ConfigDict(extra="forbid")
+    org: "Org"
+    reports: list[PortalReport]
+
+
 class Org(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     name: str
     sub: Text
     report_count: int = 0
+
+
+class SeriesDef(BaseModel):
+    """Where a monthly series lives: a sheet, and the label of its row. The
+    series is every numeric cell across that row, left to right. `skip`
+    drops leading cells (an annual-total column ahead of the months); when
+    the first cell equals the sum of the rest it is dropped automatically."""
+
+    model_config = ConfigDict(extra="forbid")
+    sheet: str
+    label: str
+    skip: int = Field(default=0, ge=0)
+
+
+class MetricDef(BaseModel):
+    """A named budget-vs-actual comparison. Budget and actual may live in
+    different workbooks — provenance carries the file either way."""
+
+    model_config = ConfigDict(extra="forbid")
+    budget: SeriesDef
+    actual: SeriesDef
+    unit: Unit = "USD"
+
+
+class ContextIn(BaseModel):
+    """What the author saves: the client's parsing knowledge.
+
+    This is the context model — everything Lumnia knows about how *this*
+    client keeps their books that a generic parser cannot guess. It shapes
+    layer 02: which sheets to skip, what unit a header means, which labels
+    are the same thing spelled twice, which rows are derived totals that
+    would double-count if extracted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    ignore_sheets: list[str] = []
+    units: dict[str, Unit] = {}          # header text -> unit, exact match wins
+    aliases: dict[str, str] = {}         # label as written -> canonical label
+    exclude_labels: list[str] = []       # rows whose label matches are dropped
+    alert_threshold_pct: float = Field(default=20.0, ge=0)  # re-ingest movement alert
+    modules: list[str] = ["movements"]   # named analyses run on every ingest
+    reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
+    metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
+    journal_code_column: str | None = None  # header of the routing-code column ("CODE")
+
+
+class Context(ContextIn):
+    """A saved version. Definitions change; every change stays visible."""
+
+    version: int
+    updated_at: datetime
+
+
+class ContextVersion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int
+    updated_at: datetime
+
+
+class ReadStats(BaseModel):
+    """The audit answer: how many reads, how many distinct readers, when the
+    last one was, and how many attempts were refused."""
+
+    model_config = ConfigDict(extra="forbid")
+    reads: int
+    readers: int
+    last_read: datetime | None = None
+    refused: int
+
+
+class StudioOrg(Org):
+    """Org plus its portal key — appears only in author-authenticated
+    responses, never on a public endpoint."""
+
+    share_key: str | None = None
 
 
 class OrgIn(BaseModel):
@@ -240,3 +332,6 @@ class OrgIn(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,38}$")
     name: str = Field(min_length=1, max_length=80)
     sub: Text
+
+
+Portal.model_rebuild()

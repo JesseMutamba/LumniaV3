@@ -1,0 +1,33 @@
+# End-to-end smoke check: is the published site serving, and is the API
+# healthy? Runs after every push so a broken deploy is visible in Actions
+# without anyone having to open the site.
+name: Smoke check
+
+on:
+  push:
+    branches: [claude/new-session-h91lyu, main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Web client responds
+        run: |
+          code=$(curl -sS -o page.html -w "%{http_code}" -L https://jessemutamba.github.io/LumniaV3/)
+          echo "pages status: $code"
+          grep -o "<title>[^<]*</title>" page.html || true
+          test "$code" = "200"
+      - name: API is healthy
+        run: |
+          # Retry for up to ~3 minutes: a fresh Render deploy (or a hostname
+          # that just changed hands) can take a moment to start answering.
+          for i in $(seq 1 12); do
+            curl -sS -m 30 https://lumnia-api-lkfg.onrender.com/v1/health | tee health.json || true
+            echo
+            if python3 -c "import json;d=json.load(open('health.json'));assert d.get('ok') is True" 2>/dev/null; then
+              echo "api ok: $(cat health.json)"; exit 0
+            fi
+            echo "attempt $i: not healthy yet, waiting 15s"; sleep 15
+          done
+          echo "API never became healthy"; cat health.json; exit 1

@@ -9,16 +9,18 @@ opens it on a phone with no account.
 
 The platform ships empty. It holds only what you publish.
 
-## Two surfaces
+## Three surfaces
 
 | | Who | Where | Needs |
 |---|---|---|---|
 | **Studio** | you | `#/studio` | the author token |
+| **Portal** | your client | `#/c/<org>?k=<key>` | the portal link |
 | **Viewer** | your stakeholder | `#/r/<id>?k=<key>` | the link |
 
 A reader cannot reach Studio, cannot list clients, and cannot open a report
-they don't hold a key for. There is no navigation out of a report because
-there is nowhere for them to go.
+they don't hold a key for. A portal key is scoped to one client: it lists
+that client's published reports and nothing else. There is no navigation out
+of a report because there is nowhere for them to go.
 
 ## Layout
 
@@ -98,13 +100,34 @@ ahead of the client.
 | CH-003 | An implied unit price that silently changes between periods. |
 | CH-004 | Any value that reached a report without a source cell. |
 
+## Named analysis modules
+
+The analyses clients need repeatedly, packaged with fixed definitions and
+enabled per client in their context document (`modules: [...]`):
+
+| Module | Does |
+|---|---|
+| `movements` | What moved since the previous ingest of the same file, beyond the client's alert threshold. |
+| `execution` | Budget vs actual per line, total as a **ratio of totals** — never an average of ratios. |
+| `reconciliation` | Same date + same amount in two cash journals: the same money counted twice. `reconcile_sheets` in the context names the journals. |
+
+A module version is a definition: `execution v1.0` computes the same thing
+for every client, every month. Registry at `/v1/studio/modules`.
+
 ## Known gaps
 
-- **Layer 02 (parse & normalize) does not exist.** Turning a workbook into a
-  report document is manual. `api/examples/pvak_adapter.py` shows what that
-  currently looks like, and is what confidence-scored parsing has to replace.
+- **Layer 02 (parse & normalize) is a first slice.** `POST /v1/studio/ingest`
+  detects tables with confidence scores and returns a reviewable draft report
+  in which every value carries its source cell. Header inference and column
+  typing only: merged cells, multi-row headers and semantic mapping (which
+  table is *the budget*?) still need a person, and
+  `api/examples/pvak_adapter.py` remains the reference for a hand-built
+  report. The machine writes the first draft; the author signs it.
 - **Share keys are bearer tokens in a URL.** Unguessable, but a forwarded link
   is a granted read. Right trade for named stakeholders, wrong one for an
   enterprise buyer.
-- No read audit log, no rate limiting, no accounts.
+- Every public read attempt — accepted or refused — lands in an audit log
+  (`/v1/studio/.../reads` answers who opened what, when), and the read paths
+  are rate limited per IP. Still no accounts: reader identity is a coarse
+  fingerprint, not a login, and that is the next assurance gate.
 - `barPair` takes exactly two series.
