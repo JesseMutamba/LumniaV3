@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Block from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
@@ -223,6 +223,40 @@ function Viewer({ id, shareKey, locale }) {
 
   const L = locale === 'fr'
 
+  // A long report is a document nobody finishes. Its own level-2 headings
+  // are its sections, so they become the tabs — no extra structure to keep
+  // in step, and a report written without headings still reads as one page.
+  const tabs = useMemo(() => {
+    if (!rep) return []
+    const out = []
+    for (const b of rep.blocks) {
+      const isSection = b.type === 'heading' && (b.level ?? 2) <= 2
+      if (b.type === 'ledger') {
+        out.push({ key: 'src', label: L ? 'Sources' : 'Sources', blocks: [b] })
+        continue
+      }
+      if (isSection || !out.length) {
+        const label = isSection
+          ? t(b.label, locale) || t(b.text, locale)
+          : L ? 'Rapport' : 'Report'
+        out.push({ key: `s${out.length}`, label, blocks: [] })
+      }
+      out[out.length - 1].blocks.push(b)
+    }
+    if (hasDashboard(rep)) {
+      out.unshift({
+        key: 'dash',
+        label: L ? 'Tableau de bord' : 'Dashboard',
+        blocks: [],
+      })
+    }
+    return out
+  }, [rep, locale, L])
+
+  useEffect(() => {
+    if (tabs.length) setLens(tabs[0].key)
+  }, [rep])
+
   if (err)
     return (
       <div className="doc">
@@ -265,28 +299,23 @@ function Viewer({ id, shareKey, locale }) {
         </div>
       </div>
 
-      {hasDashboard(rep) && (
-        <div className="lens" role="tablist" aria-label={L ? 'Vue' : 'View'}>
-          {[
-            ['doc', L ? 'Document' : 'Document'],
-            ['dash', L ? 'Tableau de bord' : 'Dashboard'],
-          ].map(([k, label]) => (
-            <button
-              key={k}
-              role="tab"
-              aria-selected={lens === k}
-              onClick={() => setLens(k)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="lens" role="tablist" aria-label={L ? 'Sections' : 'Sections'}>
+        {tabs.map((tb) => (
+          <button
+            key={tb.key}
+            role="tab"
+            aria-selected={lens === tb.key}
+            onClick={() => setLens(tb.key)}
+          >
+            {tb.label}
+          </button>
+        ))}
+      </div>
 
-      {lens === 'dash' && hasDashboard(rep) ? (
+      {lens === 'dash' ? (
         <Dashboard rep={rep} locale={locale} />
       ) : (
-        rep.blocks.map((b, i) => (
+        (tabs.find((tb) => tb.key === lens) || tabs[0]).blocks.map((b, i) => (
           <Block key={i} b={b} locale={locale} sources={rep.sources} />
         ))
       )}

@@ -384,6 +384,134 @@ def _aligned(wbs: list[Workbook], mdef):
 
 
 # --------------------------------------------------------------------------
+# history — a closed season, drawn under the months it actually happened in
+# --------------------------------------------------------------------------
+
+MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+             "août", "septembre", "octobre", "novembre", "décembre"]
+MONTHS_EN = ["january", "february", "march", "april", "may", "june", "july",
+             "august", "september", "october", "november", "december"]
+MONTH_ABBR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Aoû",
+              "Sep", "Oct", "Nov", "Déc"]
+
+
+def _month_columns(sheet, declared: int | None) -> dict[int, int]:
+    """{month index 0-11: column} from the sheet's own header row."""
+    rows = [declared] if declared else range(1, min(sheet.rows, 40) + 1)
+    for r in rows:
+        if r is None or r > sheet.rows:
+            continue
+        found = {}
+        for ci, v in enumerate(sheet.grid[r - 1] or []):
+            if not isinstance(v, str):
+                continue
+            name = _norm(v)
+            for i, (fr, en) in enumerate(zip(MONTHS_FR, MONTHS_EN)):
+                if name.startswith(_norm(fr)[:4]) or name.startswith(_norm(en)[:4]):
+                    found.setdefault(i, ci + 1)
+                    break
+        if len(found) >= 6:
+            return found
+    return {}
+
+
+def _run_history(wbs: list[Workbook], tables, ctx, extras) -> list:
+    """Rows the client keeps month by month, charted under the months they
+    belong to. A season that began in July is drawn from July: reading the
+    sheet's month header rather than counting from the left is the whole
+    point, because the alternative silently relabels a harvest."""
+    if not ctx or not getattr(ctx, "histories", None):
+        return []
+    blocks: list = []
+    for hname, hdef in ctx.histories.items():
+        target = None
+        for wb in wbs:
+            for name, sheet in wb.sheets.items():
+                if _norm(name) == _norm(hdef.sheet):
+                    target = (wb, name, sheet)
+                    break
+        if not target:
+            continue
+        wb, sname, sheet = target
+        months = _month_columns(sheet, hdef.months_row)
+        if not months:
+            continue
+        found: dict[str, dict[int, tuple[int, float]]] = {}
+        rownos: dict[str, int] = {}
+        for display, label in hdef.rows.items():
+            for r in range(1, sheet.rows + 1):
+                row = sheet.grid[r - 1] or []
+                labels = [_norm(c) for c in row[:4] if isinstance(c, str)]
+                if not any(_norm(label) == c for c in labels):
+                    continue
+                vals = {
+                    m: (col, float(row[col - 1]))
+                    for m, col in months.items()
+                    if col <= len(row) and _is_num(row[col - 1])
+                }
+                if vals:
+                    found[display] = vals
+                    rownos[display] = r
+                break
+        if not found:
+            continue
+        # Only the months every declared row covers — a chart pairing a month
+        # of one series against a different month of another is worse than a
+        # shorter chart.
+        span = sorted(set.intersection(*(set(v) for v in found.values())))
+        if not span:
+            continue
+        names = list(found)[:2]
+        blocks.append(
+            KpiGrid(items=[
+                Kpi(
+                    label=Text(fr=f"{hname} · {d}", en=f"{hname} · {d}"),
+                    value=Value(
+                        n=round(sum(found[d][m][1] for m in span), 1),
+                        unit=hdef.unit, derived="sum",
+                        src=Src(file=wb.source.idx, sheet=sname,
+                                cells=a1_range(rownos[d], found[d][span[0]][0],
+                                               rownos[d], found[d][span[-1]][0])),
+                    ),
+                    sub=Text(
+                        fr=f"cumul sur {len(span)} mois — {MONTH_ABBR[span[0]]} à {MONTH_ABBR[span[-1]]}",
+                        en=f"total over {len(span)} months — {MONTH_ABBR[span[0]]} to {MONTH_ABBR[span[-1]]}",
+                    ),
+                    lineage=[
+                        Step(text=Text(fr=f"Somme de « {hdef.rows[d]} » sur les mois couverts",
+                                       en=f"Sum of “{hdef.rows[d]}” over the months covered"),
+                             cells=f"{sname}!" + a1_range(
+                                 rownos[d], found[d][span[0]][0],
+                                 rownos[d], found[d][span[-1]][0]),
+                             n=round(sum(found[d][m][1] for m in span), 1)),
+                    ],
+                )
+                for d in names
+            ])
+        )
+        if len(names) == 2:
+            blocks.append(BarPair(
+                title=Text(fr=hname, en=hname),
+                sub=hdef.note or Text(fr="mensuel", en="monthly"),
+                x=[MONTH_ABBR[m] for m in span],
+                series=[
+                    Series(
+                        key=f"h{i}", label=Text(fr=d),
+                        values=[
+                            Value(n=found[d][m][1], unit=hdef.unit,
+                                  src=Src(file=wb.source.idx, sheet=sname,
+                                          cells=a1(rownos[d], found[d][m][0])))
+                            for m in span
+                        ],
+                    )
+                    for i, d in enumerate(names)
+                ],
+                fmt="n",
+            ))
+    return blocks
+
+
+# --------------------------------------------------------------------------
 # trajectory — the plan's own multi-year summary, read rather than retyped
 # --------------------------------------------------------------------------
 
@@ -1014,6 +1142,13 @@ MODULES: dict[str, Module] = {
             description_fr="Écritures à même date et même montant dans deux journaux : le même argent compté deux fois.",
             description_en="Entries with the same date and amount in two journals: the same money counted twice.",
             run=_run_reconciliation,
+        ),
+        Module(
+            name="history",
+            version="1.0",
+            description_fr="Séries mensuelles déjà closes — une campagne passée — tracées sous les mois où elles ont eu lieu, d'après l'en-tête de la feuille.",
+            description_en="Closed monthly series — a past season — drawn under the months they happened in, from the sheet's own header.",
+            run=_run_history,
         ),
         Module(
             name="trajectory",
