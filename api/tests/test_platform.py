@@ -666,3 +666,88 @@ def test_dashboard_aggregates_per_client(client, auth):
 
     # the dashboard is the author's view — no token, no rows
     assert client.get("/v1/studio/dashboard").status_code == 401
+
+
+# --------------------------------------------------------------------------
+# coverage — uncoded journal entries are money that cannot land anywhere
+# --------------------------------------------------------------------------
+
+JOURNAL = {"journal": [
+    ["Date", "Libellé", "CODE", "Sorties USD", "Solde USD"],
+    ["2026-01-05", "Achat pièces", "6022", 120, 880],
+    ["2026-01-08", "Transport équipe", "", 60, 820],
+    ["2026-01-12", "Ciment chantier", None, 300, 520],
+]}
+
+
+def test_coverage_lists_uncoded_entries(client, auth):
+    client.post("/v1/orgs", json={"id": "cov", "name": "Cov", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/cov/context", json={
+        "modules": ["coverage"],
+        "reconcile_sheets": ["journal"],
+        "journal_code_column": "CODE",
+    }, headers=auth)
+    body = _ingest(client, auth, JOURNAL, org="cov").json()
+    assert any(m.startswith("coverage") for m in body["modules_run"])
+
+    kpi = next(b for b in body["draft"]["blocks"] if b["type"] == "kpiGrid"
+               and "sans code" in b["items"][0]["label"]["fr"])
+    item = kpi["items"][0]
+    assert item["value"]["n"] == 2 and item["value"]["unit"] == "count"
+    assert item["tone"] == "warn"
+    assert "3 écritures" in item["sub"]["fr"] and "360" in item["sub"]["fr"]
+
+    flag = next(b for b in body["draft"]["blocks"] if b["type"] == "flag"
+                and "code" in b["tag"]["fr"].lower())
+    assert "2 écriture(s)" in flag["title"]["fr"]
+
+    table = next(b for b in body["draft"]["blocks"] if b["type"] == "table"
+                 and b["columns"][0]["key"] == "entry")
+    assert len(table["rows"]) == 2
+    first = table["rows"][0]
+    # the amount points at its cell; the missing code points at where it belongs
+    assert first["entry"] == "Transport équipe"
+    assert first["amount"]["n"] == 60 and first["amount"]["src"]["cells"] == "D3"
+    assert first["code"] == "journal!C3"
+
+    # balance columns are never cited as amounts
+    assert all("E" not in r["amount"]["src"]["cells"] for r in table["rows"])
+
+
+def test_coverage_all_coded_is_good_news(client, auth):
+    client.post("/v1/orgs", json={"id": "cov2", "name": "Cov2", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/cov2/context", json={
+        "modules": ["coverage"],
+        "reconcile_sheets": ["journal"],
+    }, headers=auth)
+    coded = {"journal": [
+        ["Date", "Libellé", "CODE", "Sorties USD"],
+        ["2026-01-05", "Achat pièces", "6022", 120],
+        ["2026-01-08", "Transport équipe", "6021", 60],
+    ]}
+    body = _ingest(client, auth, coded, org="cov2").json()
+    kpi = next(b for b in body["draft"]["blocks"] if b["type"] == "kpiGrid"
+               and "sans code" in b["items"][0]["label"]["fr"])
+    assert kpi["items"][0]["value"]["n"] == 0
+    assert kpi["items"][0]["tone"] == "good"
+    assert not any(b["type"] == "flag" and "code" in b["tag"]["fr"].lower()
+                   for b in body["draft"]["blocks"])
+
+
+# --------------------------------------------------------------------------
+# timeline — the same figure watched across versions of the file
+# --------------------------------------------------------------------------
+
+def test_timeline_keeps_each_runs_facts(client, auth):
+    runs = client.get("/v1/studio/orgs/cov/timeline", headers=auth).json()
+    assert len(runs) >= 1
+    fact = next(f for f in runs[0]["facts"] if f.get("n") is not None)
+    assert fact["label"] == "Écritures sans code · journal"
+    assert fact["n"] == 2 and fact["unit"] == "count"
+    assert any(m.startswith("coverage") for m in runs[0]["modules"])
+
+    assert client.get("/v1/studio/orgs/cov/timeline").status_code == 401
+    assert client.get("/v1/studio/orgs/nope/timeline",
+                      headers=auth).status_code == 404

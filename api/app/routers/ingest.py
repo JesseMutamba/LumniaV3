@@ -19,7 +19,7 @@ from .. import store
 from ..auth import require_author
 from ..pipeline.checks import detect_rollup_hierarchy
 from ..pipeline.ingest import read_workbook
-from ..pipeline.modules import DEFAULT_MODULES, MODULES, run_modules
+from ..pipeline.modules import DEFAULT_MODULES, MODULES, facts_of, run_modules
 from ..pipeline.parse import build_draft, detect_tables
 from ..pipeline.recur import diff, snapshot
 from ..schema import Prose, Report, Source, Text
@@ -228,6 +228,11 @@ async def ingest(
                     )
                 ),
             )
+        # The timeline: each analyse session leaves its computed facts
+        # behind, so the same figure can be watched across versions of
+        # the client's file.
+        if modules_run and store.get_org(org):
+            store.put_run(org, modules_run, facts_of(blocks))
 
     return Inventory(
         sources=[wb.source for wb in wbs],

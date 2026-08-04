@@ -343,6 +343,34 @@ def get_dashboard():
     return [DashboardRow(**r) for r in store.dashboard()]
 
 
+class RunFact(BaseModel):
+    label: str
+    n: float | None = None
+    unit: str | None = None
+    tone: str | None = None
+    title: str | None = None
+
+
+class RunRecord(BaseModel):
+    ts: str
+    modules: list[str]
+    facts: list[RunFact]
+
+
+@router.get(
+    "/studio/orgs/{org_id}/timeline",
+    response_model=list[RunRecord],
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_timeline(org_id: str):
+    """Every analyse run for this client, newest first, with the facts it
+    computed — the same figure watched across versions of the file."""
+    if not store.get_org(org_id):
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    return [RunRecord(**r) for r in store.list_runs(org_id)]
+
+
 @router.get(
     "/studio/reports/{report_id}/reads",
     response_model=ReadStats,

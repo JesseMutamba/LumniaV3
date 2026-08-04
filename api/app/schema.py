@@ -291,6 +291,7 @@ class ContextIn(BaseModel):
     modules: list[str] = ["movements"]   # named analyses run on every ingest
     reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
     metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
+    journal_code_column: str | None = None  # header of the routing-code column ("CODE")
 
 
 class Context(ContextIn):

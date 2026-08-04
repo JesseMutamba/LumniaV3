@@ -48,6 +48,13 @@ CREATE TABLE IF NOT EXISTS ingestions (
   summary  TEXT NOT NULL,      -- json snapshot of detected tables
   PRIMARY KEY (org, filename, seq)
 );
+CREATE TABLE IF NOT EXISTS runs (
+  org     TEXT NOT NULL,
+  ts      TEXT NOT NULL,
+  modules TEXT NOT NULL,       -- json list of "name vX.Y" actually run
+  facts   TEXT NOT NULL        -- json list of numeric facts the run produced
+);
+CREATE INDEX IF NOT EXISTS runs_org ON runs(org, ts);
 CREATE TABLE IF NOT EXISTS reads (
   ts     TEXT NOT NULL,
   kind   TEXT NOT NULL,        -- 'report' | 'portal'
@@ -205,6 +212,37 @@ def list_ingestions(org_id: str) -> list[dict]:
             (org_id,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --------------------------------------------------------------------------
+# runs — the analysis timeline. Every analyse session leaves its computed
+# facts behind, so "how did this number move across versions of the file"
+# is a query, not an archaeology dig.
+# --------------------------------------------------------------------------
+
+def put_run(org_id: str, modules: list[str], facts: list[dict]) -> None:
+    from datetime import datetime, timezone
+
+    with connect() as con:
+        con.execute(
+            "INSERT INTO runs (org, ts, modules, facts) VALUES (?,?,?,?)",
+            (org_id, datetime.now(timezone.utc).isoformat(),
+             json.dumps(modules), json.dumps(facts)),
+        )
+
+
+def list_runs(org_id: str, limit: int = 30) -> list[dict]:
+    with connect() as con:
+        rows = con.execute(
+            "SELECT ts, modules, facts FROM runs WHERE org = ? "
+            "ORDER BY ts DESC LIMIT ?",
+            (org_id, limit),
+        ).fetchall()
+    return [
+        {"ts": r["ts"], "modules": json.loads(r["modules"]),
+         "facts": json.loads(r["facts"])}
+        for r in rows
+    ]
 
 
 # --------------------------------------------------------------------------

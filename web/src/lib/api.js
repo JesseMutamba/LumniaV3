@@ -51,6 +51,7 @@ export const getPortal = (orgId, key) =>
 export const createOrg = (org) => req('/orgs', { method: 'POST', body: org, auth: true })
 export const listStudioOrgs = () => req('/studio/orgs', { auth: true })
 export const getDashboard = () => req('/studio/dashboard', { auth: true })
+export const getTimeline = (id) => req(`/studio/orgs/${id}/timeline`, { auth: true })
 export const rotateOrgKey = (id) =>
   req(`/studio/orgs/${id}/rotate-key`, { method: 'POST', auth: true })
 export const getOrgContext = (id) => req(`/studio/orgs/${id}/context`, { auth: true })

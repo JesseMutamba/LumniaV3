@@ -409,6 +409,146 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
 
 
 # --------------------------------------------------------------------------
+# coverage — every journal entry must carry the code that routes it
+# --------------------------------------------------------------------------
+
+def _run_coverage(wbs: list[Workbook], tables, ctx, extras) -> list:
+    """Routing coverage. In a coded cash journal, the code column is what
+    sends each entry to the ledger and on into OPEX or CAPEX — an entry
+    without a code is money that cannot land anywhere yet. This module
+    counts them per journal and lists them, each line pointing at its cell,
+    so 'waiting on documentation' becomes a worklist instead of a feeling.
+
+    Which sheets are journals comes from context.reconcile_sheets; the code
+    column's header from context.journal_code_column (default: 'code').
+    Balance columns (solde/balance) are never cited as amounts."""
+    if not ctx or not ctx.reconcile_sheets:
+        return []
+    code_name = _norm(getattr(ctx, "journal_code_column", None) or "code")
+    wanted = {_norm(s) for s in ctx.reconcile_sheets}
+    kpis: list[Kpi] = []
+    uncoded_rows: list[dict] = []
+    total_missing = 0
+    for idx, t in tables:
+        if _norm(t.sheet) not in wanted:
+            continue
+        wb = wbs[idx]
+        sheet = wb[t.sheet]
+        code_col = next(
+            (c for c in t.columns if _norm(c.label) == code_name), None
+        )
+        if not code_col:
+            continue
+        num_cols = [
+            c for c in t.columns
+            if c.kind == "number" and c.index != code_col.index
+            and "solde" not in _norm(c.label) and "balance" not in _norm(c.label)
+        ]
+        text_cols = [
+            c for c in t.columns
+            if c.kind == "text" and c.index != code_col.index
+        ]
+        if not num_cols:
+            continue
+        checked = missing = 0
+        sums: dict[str, float] = {}  # per unit — CDF and USD never add up
+        for r in range(t.first_row, t.last_row + 1):
+            amts = [
+                (c.index, float(sheet.cell(r, c.index)))
+                for c in num_cols
+                if _is_num(sheet.cell(r, c.index))
+                and abs(float(sheet.cell(r, c.index))) >= 1
+            ]
+            if not amts:
+                continue
+            checked += 1
+            code = sheet.cell(r, code_col.index)
+            if code is not None and str(code).strip():
+                continue
+            missing += 1
+            ci, v = amts[0]
+            u = _unit_for(next(c.label for c in num_cols if c.index == ci), ctx)
+            sums[u] = sums.get(u, 0.0) + v
+            if len(uncoded_rows) < MAX_RECON_ROWS:
+                # the most descriptive text cell — a libellé, not a date
+                texts = [
+                    str(sheet.cell(r, c.index)).strip() for c in text_cols
+                    if isinstance(sheet.cell(r, c.index), str)
+                    and str(sheet.cell(r, c.index)).strip()
+                ]
+                label = max(texts, key=len, default="—")
+                uncoded_rows.append(
+                    {
+                        "entry": label[:60],
+                        "amount": Value(
+                            n=v, unit=_unit_for(
+                                next(c.label for c in num_cols if c.index == ci),
+                                ctx),
+                            src=Src(file=wb.source.idx, sheet=t.sheet,
+                                    cells=a1(r, ci)),
+                        ),
+                        "code": f"{t.sheet}!{a1(r, code_col.index)}",
+                    }
+                )
+        if not checked:
+            continue
+        total_missing += missing
+        code_range = a1_range(t.first_row, code_col.index,
+                              t.last_row, code_col.index)
+        amounts = " + ".join(
+            f"{s:,.0f}".replace(",", " ") + ("" if u == "none" else f" {u}")
+            for u, s in sorted(sums.items())
+        ) or "0"
+        kpis.append(
+            Kpi(
+                label=Text(fr=f"Écritures sans code · {t.sheet}",
+                           en=f"Uncoded entries · {t.sheet}"),
+                value=Value(n=missing, unit="count", derived="sum",
+                            src=Src(file=wb.source.idx, sheet=t.sheet,
+                                    cells=code_range)),
+                sub=Text(
+                    fr=f"sur {checked} écritures — {amounts} non routés vers OPEX/CAPEX",
+                    en=f"of {checked} entries — {amounts} not routed to OPEX/CAPEX",
+                ),
+                tone="good" if missing == 0 else "warn",
+            )
+        )
+    if not kpis:
+        return []
+    blocks: list = [KpiGrid(items=kpis)]
+    if total_missing:
+        blocks.append(
+            Flag(
+                severity="warn",
+                tag=Text(fr="Couverture des codes", en="Code coverage"),
+                title=Text(
+                    fr=f"{total_missing} écriture(s) sans code de routage — la liste à apurer avec la comptabilité",
+                    en=f"{total_missing} entrie(s) without a routing code — the worklist to clear with accounting",
+                ),
+                body=Text(
+                    fr="Sans code, une écriture n'atteint ni le grand livre ni les coûts de production : les totaux OPEX/CAPEX sont incomplets d'autant.",
+                    en="Without a code, an entry reaches neither the ledger nor production costs: OPEX/CAPEX totals are short by that much.",
+                ),
+            )
+        )
+        blocks.append(
+            Table(
+                columns=[
+                    {"key": "entry", "label": Text(fr="Écriture", en="Entry"),
+                     "align": "left"},
+                    {"key": "amount", "label": Text(fr="Montant", en="Amount"),
+                     "align": "right"},
+                    {"key": "code", "label": Text(fr="Code attendu en",
+                                                  en="Code expected at"),
+                     "align": "right"},
+                ],
+                rows=uncoded_rows,
+            )
+        )
+    return blocks
+
+
+# --------------------------------------------------------------------------
 # narrate — code computes, this layer speaks
 # --------------------------------------------------------------------------
 
@@ -582,6 +722,13 @@ MODULES: dict[str, Module] = {
             run=_run_reconciliation,
         ),
         Module(
+            name="coverage",
+            version="1.0",
+            description_fr="Écritures de journal sans code de routage : l'argent qui n'atteint ni le grand livre ni OPEX/CAPEX, listé cellule par cellule.",
+            description_en="Journal entries without a routing code: money reaching neither the ledger nor OPEX/CAPEX, listed cell by cell.",
+            run=_run_coverage,
+        ),
+        Module(
             name="narrate",
             version="1.0",
             description_fr="Raconte en prose ce que les autres modules ont calculé — chaque chiffre repris tel quel, jamais inventé. Relecture Claude optionnelle.",
@@ -592,6 +739,21 @@ MODULES: dict[str, Module] = {
 }
 
 DEFAULT_MODULES = ["movements"]
+
+
+def facts_of(blocks: list) -> list[dict]:
+    """The numeric facts a run produced, compact enough to store: what the
+    timeline trends from version to version of the client's file."""
+    out: list[dict] = []
+    for b in blocks:
+        kind = getattr(b, "type", None)
+        if kind == "kpiGrid":
+            for k in b.items:
+                out.append({"label": k.label.fr, "n": k.value.n,
+                            "unit": k.value.unit, "tone": k.tone})
+        elif kind == "flag":
+            out.append({"label": b.tag.fr, "title": b.title.fr})
+    return out
 
 
 def run_modules(names: list[str], wbs: list[Workbook], tables, ctx, extras) -> tuple[list, list[str]]:

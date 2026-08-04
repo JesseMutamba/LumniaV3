@@ -32,6 +32,18 @@ export default function Studio({ locale, onPublished }) {
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
   const [dash, setDash] = useState([])
+  const [tlOrg, setTlOrg] = useState(null)
+  const [timeline, setTimeline] = useState([])
+
+  async function openTimeline(id) {
+    if (tlOrg === id) {
+      setTlOrg(null)
+      return
+    }
+    setTlOrg(id)
+    setTimeline([])
+    api.getTimeline(id).then(setTimeline).catch(() => {})
+  }
 
   const L = locale === 'fr'
   const refresh = () => {
@@ -225,6 +237,42 @@ export default function Studio({ locale, onPublished }) {
                     ? `${L ? 'contexte' : 'context'} v${d.context_version}${d.modules.length ? ` · ${d.modules.join(' · ')}` : ''}`
                     : L ? 'sans contexte' : 'no context'}
                 </span>
+                <button className="link" onClick={() => openTimeline(d.id)}>
+                  {tlOrg === d.id
+                    ? L ? 'fermer' : 'close'
+                    : L ? 'chronologie' : 'timeline'}
+                </button>
+                {tlOrg === d.id && (
+                  <div className="tl">
+                    {timeline.length === 0 && (
+                      <div className="tl-row">
+                        <span className="muted">
+                          {L
+                            ? 'Aucune analyse pour ce client — chaque passage au panneau 01 laisse une ligne ici.'
+                            : 'No analyse runs for this client yet — every pass through panel 01 leaves a row here.'}
+                        </span>
+                      </div>
+                    )}
+                    {timeline.map((run, i) => (
+                      <div className="tl-row" key={i}>
+                        <span className="tl-ts">{String(run.ts).slice(0, 10)}</span>
+                        <span className="tl-facts">
+                          {run.facts
+                            .filter((f) => f.n != null)
+                            .map((f, j) => (
+                              <span className="tl-fact" key={j} data-tone={f.tone || 'neutral'}>
+                                {f.label} ={' '}
+                                {f.n}
+                                {f.unit === 'pct' ? ' %' : ''}
+                              </span>
+                            ))}
+                          {run.facts.filter((f) => f.n != null).length === 0 &&
+                            (L ? 'aucun fait chiffré' : 'no numeric facts')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
