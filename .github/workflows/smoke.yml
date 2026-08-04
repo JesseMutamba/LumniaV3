@@ -33,6 +33,28 @@ jobs:
           grep -qi "lumnia" page.html
           echo "asset bundle served:"
           grep -o 'assets/index-[^"]*\.js' page.html | head -1
+      - uses: actions/checkout@v4
+      - name: Every analysis this repo defines is live
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          # "Deployed" means the running service can do what the code says,
+          # not that a push succeeded. Compare the live registry against the
+          # module list in this commit.
+          if [ -z "$TOKEN" ]; then echo "no token - skipping registry check"; exit 0; fi
+          curl -sS -m 30 "$API/studio/modules" -H "Authorization: Bearer $TOKEN" -o live.json
+          python3 - <<'PY'
+          import json, re, sys, pathlib
+          src = pathlib.Path("api/app/pipeline/modules.py").read_text()
+          want = set(re.findall(r'name="([a-z-]+)",\n\s+version=', src))
+          live = {m["name"] for m in json.load(open("live.json"))}
+          missing = sorted(want - live)
+          print("defined:", len(want), "| live:", len(live))
+          if missing:
+              print("NOT DEPLOYED:", missing); sys.exit(1)
+          print("all analyses live:", ", ".join(sorted(live)))
+          PY
       - name: The deployed build is the current one
         run: |
           # "It looks the same" is usually a stale deploy or a cached page.
