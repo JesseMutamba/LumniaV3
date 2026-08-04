@@ -112,24 +112,28 @@ def _run_execution(wbs: list[Workbook], tables, ctx, extras) -> list:
         for r in range(t.first_row, t.last_row + 1):
             label = sheet.cell(r, label_col.index)
             b, a = sheet.cell(r, b_col.index), sheet.cell(r, a_col.index)
-            if not isinstance(label, str) or not _is_num(b) or not _is_num(a):
+            if not isinstance(label, str) or not (_is_num(b) or _is_num(a)):
                 continue
-            sum_b += float(b)
-            sum_a += float(a)
+            # A budgeted line with nothing spent yet has spent nothing — it
+            # does not leave the denominator. Dropping such rows was silently
+            # overstating execution: a line budgeted 8 000 and untouched used
+            # to vanish, turning 13,6 % of spend into 50 %.
+            bv = float(b) if _is_num(b) else 0.0
+            av = float(a) if _is_num(a) else 0.0
+            sum_b += bv
+            sum_a += av
             first_r = first_r or r
             last_r = r
-            if len(rows) < MAX_RAIL_ROWS and b:
+            if len(rows) < MAX_RAIL_ROWS and bv:
                 unit = _unit_for(b_col.label, ctx)
+                b_src = Src(file=wb.source.idx, sheet=t.sheet,
+                            cells=a1(r, b_col.index))
                 rows.append(
                     RailRow(
                         label=Text(fr=label.strip()),
-                        envelope=Value(n=float(b), unit=unit,
-                                       src=Src(file=wb.source.idx, sheet=t.sheet,
-                                               cells=a1(r, b_col.index))),
-                        pace=Value(n=float(b), unit=unit,
-                                   src=Src(file=wb.source.idx, sheet=t.sheet,
-                                           cells=a1(r, b_col.index))),
-                        actual=Value(n=float(a), unit=unit,
+                        envelope=Value(n=bv, unit=unit, src=b_src),
+                        pace=Value(n=bv, unit=unit, src=b_src),
+                        actual=Value(n=av, unit=unit,
                                      src=Src(file=wb.source.idx, sheet=t.sheet,
                                              cells=a1(r, a_col.index))),
                     )
@@ -355,16 +359,24 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
             continue
         bwb, bsheet, brow, bcells = found_b
         awb, asheet, arow, acells = found_a
-        n = min(len(acells), len(bcells))
+        # Align by month position, never by sequence. A month with no spend
+        # leaves a blank cell; pairing the surviving cells in order would
+        # compare March's spend against February's budget and drop March's
+        # budget entirely — halving the reported execution.
+        bmap = {c - bcells[0][0]: (c, v) for c, v in bcells}
+        amap = {c - acells[0][0]: (c, v) for c, v in acells}
+        n = min(max(amap) + 1, max(bmap) + 1)   # months the actuals reach
         if n == 0:
             continue
-        sum_a = sum(v for _, v in acells[:n])
-        sum_b = sum(v for _, v in bcells[:n])
-        if not sum_b:
+        a_in = [(c, v) for off, (c, v) in sorted(amap.items()) if off < n]
+        b_in = [(c, v) for off, (c, v) in sorted(bmap.items()) if off < n]
+        sum_a = sum(v for _, v in a_in)
+        sum_b = sum(v for _, v in b_in)
+        if not sum_b or not a_in:
             continue
         pct = round(sum_a / sum_b * 100, 1)
-        a_range = a1_range(arow, acells[0][0], arow, acells[n - 1][0])
-        b_range = a1_range(brow, bcells[0][0], brow, bcells[n - 1][0])
+        a_range = a1_range(arow, a_in[0][0], arow, a_in[-1][0])
+        b_range = a1_range(brow, b_in[0][0], brow, b_in[-1][0])
         fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
         lineage = [
             Step(
@@ -415,7 +427,19 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
                 ]
             )
         )
-        m = min(len(bcells), 12)
+        # The chart is positional — bar i sits under month i — so each series
+        # stops at its first missing month rather than sliding later months
+        # under the wrong label. Fewer bars beats mislabelled ones.
+        def _prefix(mapping):
+            out, off = [], 0
+            while off in mapping:
+                out.append(mapping[off])
+                off += 1
+            return out
+
+        m = min(len(_prefix(bmap)), 12)
+        plan_cells = _prefix(bmap)[:m]
+        act_cells = _prefix(amap)[:m]
         blocks.append(
             BarPair(
                 title=Text(fr=f"{mname} · budget contre réel",
@@ -430,7 +454,7 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
                             Value(n=v, unit=mdef.unit,
                                   src=Src(file=bwb.source.idx, sheet=bsheet,
                                           cells=a1(brow, c)))
-                            for c, v in bcells[:m]
+                            for c, v in plan_cells
                         ],
                     ),
                     Series(
@@ -440,11 +464,11 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
                             Value(n=v, unit=mdef.unit,
                                   src=Src(file=awb.source.idx, sheet=asheet,
                                           cells=a1(arow, c)))
-                            for c, v in acells[:min(len(acells), m)]
+                            for c, v in act_cells
                         ],
                     ),
                 ],
-                cutoff=min(n, m),
+                cutoff=len(act_cells),
                 fmt="k",
             )
         )

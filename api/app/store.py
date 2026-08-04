@@ -299,22 +299,29 @@ def put_file(org_id: str, filename: str, seq: int, sha256: str | None,
 
 
 def latest_files(org_id: str) -> list[dict]:
-    """The newest kept copy of every workbook this client has sent, in the
-    order they were first ingested — file 0 stays file 0 across questions."""
+    """The newest kept copy of every workbook this client has sent, ordered
+    by when each file was *first* seen.
+
+    The ordering matters more than it looks: a value's provenance records
+    which file it came from as an index into this list, so the order must
+    not shift when one workbook is re-uploaded on its own. Ordering by the
+    newest copy's timestamp would do exactly that, and every stored figure
+    would start naming the wrong workbook."""
     with connect() as con:
         rows = con.execute(
             "SELECT f.filename, f.seq, f.ts, f.sha256, f.body FROM files f "
-            "JOIN (SELECT filename, MAX(seq) AS seq FROM files WHERE org = ? "
-            "      GROUP BY filename) m "
+            "JOIN (SELECT filename, MAX(seq) AS seq, MIN(ts) AS first_ts "
+            "      FROM files WHERE org = ? GROUP BY filename) m "
             "  ON m.filename = f.filename AND m.seq = f.seq "
-            "WHERE f.org = ? ORDER BY f.ts, f.filename",
+            "WHERE f.org = ? ORDER BY m.first_ts, f.filename",
             (org_id, org_id),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
 def latest_file_names(org_id: str) -> list[str]:
-    """Which books a question would read — without loading any of them."""
+    """Which books a question would read, in the order `latest_files` loads
+    them — without loading any of them."""
     with connect() as con:
         rows = con.execute(
             "SELECT filename, MIN(ts) AS first_ts FROM files WHERE org = ? "

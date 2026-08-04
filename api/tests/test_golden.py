@@ -112,6 +112,54 @@ def test_g3_ratio_of_totals_never_average_of_ratios(tmp_path):
     assert k.value.n != pytest.approx(42.7, abs=1.0)          # the average of ratios
 
 
+def test_g3b_a_month_with_no_spend_does_not_shift_the_others(tmp_path):
+    """Found by review, not by a client — which is the point of a gate.
+
+    A month with no spend leaves a blank cell. Pairing the surviving cells
+    in order compared March's spend against February's budget and dropped
+    March's budget entirely: 13,3 % reported where the truth is 6,7 %.
+    Hand-worked: spent 10 (Jan) + 30 (Mar) = 40 against a budget of
+    100 + 200 + 300 = 600 over those three months."""
+    budget = {"opex": [
+        ["Poste", "Jan", "Fév", "Mar"],
+        ["Ligne", 5, 5, 5],
+        ["TOTAL DEPENSES OPEX", 100, 200, 300],
+    ]}
+    actual = {"reel": [
+        ["Opération", "Jan", "Fév", "Mar"],
+        ["Ligne", 1, None, 1],
+        ["TOTAL SITE", 10, None, 30],
+    ]}
+    blocks, _ = _run([budget, actual], BVA_CTX, tmp_path)
+    k = _kpis(blocks)[0]
+    assert k.value.n == pytest.approx(6.7, abs=0.1)
+    assert k.lineage[0].n == 40.0
+    assert k.lineage[1].n == 600.0
+    # the chart stops at the gap rather than sliding March under February
+    bar = next(b for b in blocks if getattr(b, "type", "") == "barPair")
+    act = bar.series[1]
+    assert [v.n for v in act.values] == [10.0]
+    assert bar.cutoff == 1
+
+
+def test_g3c_a_budgeted_line_with_no_spend_stays_in_the_denominator(tmp_path):
+    """Also found by review. A line budgeted 8 000 and untouched used to
+    vanish from the comparison entirely, turning 13,6 % of spend into 50 %.
+    Hand-worked: 1 500 spent against 11 000 budgeted."""
+    sheet = {"plan": [
+        ["Poste", "Budget USD", "Réel USD"],
+        ["Semences", 1000, 500],
+        ["Engrais", 1000, 500],
+        ["Transport", 8000, None],      # budgeted, nothing spent yet
+        ["Divers", 1000, 500],
+    ]}
+    blocks, _ = _run([sheet], ContextIn(modules=["execution"]), tmp_path)
+    k = _kpis(blocks)[0]
+    assert k.value.n == pytest.approx(13.6, abs=0.1)
+    assert k.lineage[0].n == 1500.0
+    assert k.lineage[1].n == 11000.0
+
+
 # --------------------------------------------------------------------------
 # G4 · coverage: uncoded entries, and the balance column that is not an amount
 # --------------------------------------------------------------------------

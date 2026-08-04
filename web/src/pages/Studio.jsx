@@ -44,7 +44,14 @@ export default function Studio({ locale, onPublished }) {
   const loadTiles = (org) => {
     if (org) api.getTiles(org).then(setTiles).catch(() => setTiles(null))
   }
-  useEffect(() => { loadTiles(qOrg) }, [qOrg])
+  // Changing client changes whose numbers these are: clear the answer with
+  // the wall, or one client's figures sit on screen under another's name.
+  useEffect(() => {
+    setAnswer(null)
+    setTiles(null)
+    setInv(null)
+    loadTiles(qOrg)
+  }, [qOrg])
 
   async function pin(question) {
     const ok = await run(() => api.addTile(qOrg, question))
@@ -155,8 +162,15 @@ export default function Studio({ locale, onPublished }) {
     const fs = [...(e.target.files || [])]
     e.target.value = ''
     if (!fs.length) return
-    const r = await run(() => api.ingestWorkbook(fs, orgs[0]?.id))
-    if (r) setInv(r)
+    // The client selected above, not whichever one happens to be first:
+    // filing a workbook under the wrong client corrupts both.
+    const org = qOrg || orgs[0]?.id
+    if (!org) return
+    const r = await run(() => api.ingestWorkbook(fs, org))
+    if (r) {
+      setInv(r)
+      loadTiles(org)
+    }
   }
 
   const CTX_TEMPLATE = {
@@ -381,7 +395,7 @@ export default function Studio({ locale, onPublished }) {
             {tiles.tiles.map((t) => (
               <div className="wall-t" key={t.id}>
                 {t.block ? (
-                  <Block b={t.block} locale={locale} sources={tiles.sources} />
+                  <Block b={t.block} locale={locale} sources={t.sources} />
                 ) : (
                   <div className="note">
                     {L ? 'sans réponse dans les analyses récentes' : 'unanswered by recent analyses'}
@@ -481,6 +495,15 @@ export default function Studio({ locale, onPublished }) {
             ? L ? 'Analyse…' : 'Analysing…'
             : L ? 'Choisir un ou des classeurs .xlsx' : 'Choose .xlsx workbook(s)'}
         </label>
+        {orgs.length > 0 && (
+          <p className="fine">
+            {L ? 'Classé pour le client ' : 'Filed under client '}
+            <b>{orgs.find((o) => o.id === (qOrg || orgs[0]?.id))?.name}</b>
+            {L
+              ? ' — le client choisi au panneau 01.'
+              : ' — the client selected in panel 01.'}
+          </p>
+        )}
         {inv && (
           <div className="det">
             {inv.tables.map((t, i) => (

@@ -152,13 +152,26 @@ def _plan_claude(question: str, ctx, modules: list[str], metrics: list[str]):
     )
     if not out:
         return None
-    picked = [m for m in out.get("modules", []) if m in menu_modules]
-    picked_metrics = [m for m in out.get("metrics", []) if m in menu_metrics]
+    got_modules = out.get("modules")
+    got_metrics = out.get("metrics")
+    if not isinstance(got_modules, list):
+        return None
+    picked = [m for m in got_modules if isinstance(m, str) and m in menu_modules]
+    picked_metrics = [
+        m for m in (got_metrics if isinstance(got_metrics, list) else [])
+        if isinstance(m, str) and m in menu_metrics
+    ]
     if not picked:
         return None
-    why_fr = str(out.get("why_fr") or "").strip()
-    why_en = str(out.get("why_en") or "").strip()
-    return picked, picked_metrics, Text(fr=why_fr or "—", en=why_en or None)
+    why_fr = str(out.get("why_fr") or "").strip()[:300]
+    why_en = str(out.get("why_en") or "").strip()[:300]
+    # The rationale is prose the model wrote, and this platform's rule is
+    # that no figure exists without a cell behind it. A planner explaining
+    # itself has no figures to report, so any digit means the reply drifted
+    # — or was steered by the question text. Fall back to the rules wording.
+    if not why_fr or any(c.isdigit() for c in why_fr + why_en):
+        return picked, picked_metrics, None   # keep the choice, drop the prose
+    return picked, picked_metrics, Text(fr=why_fr, en=why_en or None)
 
 
 def build_plan(question: str, ctx, org: str) -> Plan:
@@ -170,8 +183,14 @@ def build_plan(question: str, ctx, org: str) -> Plan:
     )
     refined = _plan_claude(question, ctx, modules, metrics) if llm.available() else None
     if refined:
-        modules, metrics, rationale = refined
+        modules, metrics, why = refined
+        rationale = why or rationale
         planner = "claude"
+    # Narration is the client's standing choice, and it must be visible in
+    # the plan rather than appear during execution: it is the step that can
+    # carry figures off this machine.
+    if ctx and "narrate" in ctx.modules and "narrate" not in modules:
+        modules = modules + ["narrate"]
     return Plan(
         modules=modules,
         metrics=metrics,
@@ -321,10 +340,15 @@ def _direct_blocks(runs: list[dict], question: str) -> tuple[list[dict], dict | 
                 )
                 scored.append((s, -age, b, run))
     best = [(b, run) for s, _, b, run in
-            sorted(scored, key=lambda x: (-x[0], -x[1])) if s > 0][:3]
+            sorted(scored, key=lambda x: (-x[0], -x[1])) if s > 0]
     if not best:
         return [], None
-    return [b for b, _ in best], best[0][1]
+    # One answer, one analysis. Supporting blocks come from the same run as
+    # the best match: `src.file` indexes that run's source list, so a block
+    # rendered against another run's sources would name the wrong workbook —
+    # a figure carrying someone else's cell address is worse than none.
+    run = best[0][1]
+    return [b for b, r in best if r is run][:3], run
 
 
 def _load_workbooks(org: str):
@@ -358,9 +382,10 @@ def _analyze(org: str, question: str, plan: Plan, ctx) -> Answer:
     tables = []
     for wb in wbs:
         tables += [(wb.source.idx, t) for t in detect_tables(wb, ctx)]
+    # narrate only if this client enabled it. It is the one module that can
+    # send figures off this machine, so it runs on the client's standing
+    # instruction — and the plan named it before the author approved.
     names_to_run = [m for m in plan.modules if m in MODULES]
-    if "narrate" in MODULES:
-        names_to_run.append("narrate")
     blocks, ran = run_modules(names_to_run, wbs, tables, ctx, {})
     if not blocks:
         return Answer(
@@ -392,6 +417,7 @@ class Tile(BaseModel):
     created_at: str | None = None
     block: dict | None = None      # its current answer, or null if unanswerable
     as_of: str | None = None
+    sources: list[dict] = []       # of the run this tile's figure came from
 
 
 class TileIn(BaseModel):
@@ -439,8 +465,8 @@ def get_tiles(org_id: str):
     runs = store.recent_run_blocks(org_id)
     tiles = []
     for t in saved:
-        block, as_of = _tile_answer(runs, t["question"], t["label"])
-        tiles.append(Tile(**t, block=block, as_of=as_of))
+        block, as_of, sources = _tile_answer(runs, t["question"], t["label"])
+        tiles.append(Tile(**t, block=block, as_of=as_of, sources=sources))
     return Tiles(
         tiles=tiles,
         pending=_pending_questions(org_id, ctx, {t["id"] for t in saved}),
@@ -457,11 +483,12 @@ def _tile_answer(runs, question: str, label: str):
             if b.get("type") == "kpiGrid":
                 for it in b["items"]:
                     if it["label"].get("fr") == label:
-                        return {"type": "kpiGrid", "items": [it]}, run["ts"]
+                        return ({"type": "kpiGrid", "items": [it]},
+                                run["ts"], run["sources"])
             elif b.get("type") == "flag" and b["title"].get("fr") == label:
-                return b, run["ts"]
+                return b, run["ts"], run["sources"]
     hits, run = _direct_blocks(runs, question)
-    return (hits[0], run["ts"]) if hits else (None, None)
+    return (hits[0], run["ts"], run["sources"]) if hits else (None, None, [])
 
 
 @router.post("/studio/orgs/{org_id}/tiles", response_model=Tile,
@@ -516,4 +543,11 @@ def ask(body: AskIn):
     unknown = [m for m in plan.modules if m not in MODULES]
     if unknown:
         raise HTTPException(422, f"Unknown module(s): {unknown}")
+    # A plan arrives as request JSON, so the client's own choice is checked
+    # again here — narration is the step that can send figures off-box.
+    if "narrate" in plan.modules and not (ctx and "narrate" in ctx.modules):
+        raise HTTPException(
+            422,
+            "narrate is not enabled in this client's context; enable it there first.",
+        )
     return _analyze(body.org, body.question, plan, ctx)

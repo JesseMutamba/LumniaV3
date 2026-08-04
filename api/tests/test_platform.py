@@ -931,6 +931,75 @@ def test_workbooks_are_kept_only_while_the_client_allows_it(client, auth):
     assert store.latest_file_names("ask") == []
 
 
+def test_narration_needs_the_client_to_have_asked_for_it(client, auth, asked):
+    """narrate is the one module that can send figures off this machine. It
+    runs on the client's standing instruction, is named in the plan before
+    the author approves, and a hand-made plan cannot smuggle it in."""
+    plan = _ask(client, auth, org=asked, mode="analyze",
+                question="exécution OPEX").json()["plan"]
+    assert "narrate" not in plan["modules"]          # this context never enabled it
+
+    a = _ask(client, auth, org=asked, mode="analyze", execute=True,
+             question="exécution OPEX", plan=plan).json()
+    assert not any(m.startswith("narrate") for m in
+                   [b.get("type", "") for b in a["blocks"]])
+    assert not any(b["type"] == "prose" and "Lecture" in b["text"]["fr"]
+                   for b in a["blocks"])
+
+    forced = dict(plan, modules=plan["modules"] + ["narrate"])
+    r = _ask(client, auth, org=asked, mode="analyze", execute=True,
+             question="exécution OPEX", plan=forced)
+    assert r.status_code == 422 and "narrate" in r.text
+
+    # a client who did enable it sees it in the plan, before running
+    client.post("/v1/orgs", json={"id": "narr", "name": "Narr", "sub": {"fr": "K"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/narr/context", json={
+        "modules": ["budget-vs-actual", "narrate"],
+        "metrics": {"OPEX": {"budget": {"sheet": "opex", "label": "TOTAL DEPENSES"},
+                             "actual": {"sheet": "reel", "label": "TOTAL SITE"}}},
+    }, headers=auth)
+    _ingest_many(client, auth, [ASK_BUDGET, ASK_ACTUAL], "narr")
+    p2 = _ask(client, auth, org="narr", mode="analyze",
+              question="exécution OPEX").json()["plan"]
+    assert "narrate" in p2["modules"]
+
+
+def test_an_answer_never_mixes_sources_from_two_analyses(client, auth, asked):
+    """A figure's provenance indexes its own run's file list. Blocks from
+    different runs rendered against one list would name the wrong workbook,
+    so an answer stays within the analysis its best match came from."""
+    a = _ask(client, auth, org=asked,
+             question="exécution OPEX et écritures sans code").json()
+    n_sources = len(a["sources"])
+    for b in a["blocks"]:
+        items = b["items"] if b["type"] == "kpiGrid" else []
+        for it in items:
+            assert it["value"]["src"]["file"] < n_sources
+
+
+def test_file_order_survives_a_single_file_re_upload(client, auth):
+    """Provenance records which file a number came from as an index into
+    the client's file list. Re-uploading one workbook must not reorder it."""
+    from app import store
+
+    client.post("/v1/orgs", json={"id": "ord", "name": "Ord", "sub": {"fr": "K"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/ord/context",
+               json={"modules": ["budget-vs-actual"]}, headers=auth)
+    _ingest_many(client, auth, [ASK_BUDGET, ASK_ACTUAL], "ord")
+    before = [f["filename"] for f in store.latest_files("ord")]
+    assert before == store.latest_file_names("ord")
+
+    # the budget book alone is sent again, as a client actually would
+    client.post("/v1/studio/ingest?org=ord",
+                files=[("file", ("wb0.xlsx", io.BytesIO(_xlsx(ASK_BUDGET)),
+                                 "application/x"))], headers=auth)
+    after = [f["filename"] for f in store.latest_files("ord")]
+    assert after == before
+    assert after == store.latest_file_names("ord")
+
+
 def test_catalog_answers_what_can_you_see(client, auth, asked):
     a = _ask(client, auth, org=asked, question="Quelles données peux-tu voir ?").json()
     table = a["blocks"][0]
