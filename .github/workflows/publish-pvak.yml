@@ -72,19 +72,27 @@ jobs:
             --data-binary @context.json); echo "context: $code"
           [ "$code" = "200" ] || { head -c 400 ctx.json; exit 1; }
 
-          # Analysing on the live service retains the workbooks and records the
-          # run, so the ask surface and the tiles can answer from these books.
-          code=$(curl -sS -o ingest.json -w "%{http_code}" -m 300 -X POST "$API/studio/ingest?org=pvak" \
+          # Analysing on the live service retains the workbooks so the ask
+          # surface can answer from them later. It is a convenience, not the
+          # deliverable: these two workbooks are heavy and the small instance
+          # can refuse them, which must not stop the report from reaching its
+          # readers. Best effort, never fatal.
+          code=$(curl -sS -o ingest.json -w "%{http_code}" -m 600 --http1.1 \
+            -X POST "$API/studio/ingest?org=pvak" \
             -H "Authorization: Bearer $TOKEN" \
             -F "file=@Montage_financier_2025_a_2030.xlsx" \
-            -F "file=@SUIVI_FINANCES_PVAK_V1.xlsx"); echo "analyse: $code"
-          python3 -c "import json;print('modules run:', ', '.join(json.load(open('ingest.json')).get('modules_run',[])))" || true
+            -F "file=@SUIVI_FINANCES_PVAK_V1.xlsx" || echo 000); echo "analyse: $code"
+          python3 -c "import json;print('modules run:', ', '.join(json.load(open('ingest.json')).get('modules_run',[])))" 2>/dev/null \
+            || echo "analyse did not complete — the report below does not depend on it"
 
-          for i in 1 2 3; do
-            code=$(curl -sS -o publish.json -w "%{http_code}" -X POST "$API/orgs/pvak/reports" \
+          # The deliverable. Wait out any restart the analyse may have caused.
+          for i in $(seq 1 8); do
+            curl -sS -m 30 "$API/health" >/dev/null 2>&1 || sleep 15
+            code=$(curl -sS -o publish.json -w "%{http_code}" -m 120 --http1.1 \
+              -X POST "$API/orgs/pvak/reports" \
               -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-              --data-binary @report.json)
-            echo "publish: $code"
+              --data-binary @report.json || echo 000)
+            echo "publish attempt $i: $code"
             if [ "$code" = "200" ] || [ "$code" = "201" ]; then break; fi
             sleep 20
           done
