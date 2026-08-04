@@ -39,6 +39,12 @@ export default function App() {
     return () => removeEventListener('hashchange', on)
   }, [])
 
+  // The page must tell the truth about its language, or Chrome's
+  // auto-translate rewrites the report — filenames included.
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
   return (
     <div className="shell">
       <div className="top">
@@ -206,6 +212,14 @@ function Viewer({ id, shareKey, locale }) {
     setLens('doc')
     api.getReport(id, shareKey).then(setRep).catch(setErr)
   }, [id, shareKey])
+
+  // Tabs, bookmarks and shared links deserve the report's name, not ours.
+  useEffect(() => {
+    if (rep) document.title = `${t(rep.title, locale)} · Lumnia`
+    return () => {
+      document.title = 'Lumnia'
+    }
+  }, [rep, locale])
 
   const L = locale === 'fr'
 

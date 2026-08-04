@@ -309,18 +309,25 @@ const Ledger = ({ locale, sources }) => {
             <span key={x}>{x}</span>
           ))}
         </div>
-        {sources.map((s) => (
-          <div className="lg-r" key={s.idx}>
-            <span className="f" title={s.filename}>
-              {s.filename}
-            </span>
-            <span>{s.sheets}</span>
-            <span>{nf(s.rows_read, locale)}</span>
-            <span className="ok">
-              {s.checks_passed}/{s.checks_run} {locale === 'fr' ? 'OK' : 'pass'}
-            </span>
-          </div>
-        ))}
+        {sources.map((s) => {
+          const failed = s.checks_run > 0 && s.checks_passed < s.checks_run
+          return (
+            <div className="lg-r" key={s.idx}>
+              <span className="f" title={s.filename}>
+                {s.filename}
+              </span>
+              <span>{s.sheets}</span>
+              <span>{nf(s.rows_read, locale)}</span>
+              <span className={failed ? 'ko' : 'ok'}>
+                {s.checks_run === 0
+                  ? locale === 'fr' ? 'aucun contrôle' : 'no checks'
+                  : failed
+                    ? `${s.checks_run - s.checks_passed}/${s.checks_run} ${locale === 'fr' ? 'en échec' : 'failing'}`
+                    : `${s.checks_passed}/${s.checks_run} OK`}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

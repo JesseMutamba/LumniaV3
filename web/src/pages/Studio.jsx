@@ -393,8 +393,8 @@ export default function Studio({ locale, onPublished }) {
         </div>
         <p>
           {L
-            ? 'Déposez un document de rapport (.json). Il est validé contre le schéma et contre CH-004 — toute valeur sans cellule source est refusée avant enregistrement.'
-            : 'Drop a report document (.json). It is validated against the schema and against CH-004 — any value without a source cell is refused before it is stored.'}
+            ? 'Déposez un document de rapport (.json) — écrit à la main ou issu du panneau 01, même règle : validé contre le schéma et contre CH-004, toute valeur sans cellule source est refusée avant enregistrement.'
+            : 'Drop a report document (.json) — hand-written or from panel 01, same rule: validated against the schema and CH-004, any value without a source cell is refused before it is stored.'}
         </p>
         <label className="drop">
           <input type="file" accept=".json,application/json" onChange={upload} hidden />
@@ -406,6 +406,15 @@ export default function Studio({ locale, onPublished }) {
               ? 'Choisir un fichier .json'
               : 'Choose a .json file'}
         </label>
+        <p className="fine">
+          {L ? 'Pour rédiger à la main : ' : 'To write one by hand: '}
+          <a className="link" href="modele-rapport.json" download>
+            {L ? 'télécharger le modèle de rapport' : 'download the report template'}
+          </a>
+          {L
+            ? ' — bilingue, devises explicites, chaque valeur avec sa cellule. Remplacez les chiffres et les cellules par les vôtres, puis déposez-le ici.'
+            : ' — bilingual, explicit currencies, every value with its cell. Replace the figures and cells with yours, then drop it here.'}
+        </p>
         {orgs.length === 0 && (
           <div className="note">
             {L

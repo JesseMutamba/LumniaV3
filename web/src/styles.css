@@ -215,6 +215,7 @@ td.pos{color:var(--gold)}
 .lg-r:not(.h) span{color:var(--mut-82)}
 .lg-r:not(.h) .f{color:var(--bright)}
 .ok{color:var(--gold)!important}
+.ko{color:var(--terracotta)!important}
 .unk{border:1px dashed var(--line-strong);border-radius:3px;padding:20px;
   font-family:var(--mono);font-size:12px;color:var(--mut-5)}
 

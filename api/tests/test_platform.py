@@ -751,3 +751,25 @@ def test_timeline_keeps_each_runs_facts(client, auth):
     assert client.get("/v1/studio/orgs/cov/timeline").status_code == 401
     assert client.get("/v1/studio/orgs/nope/timeline",
                       headers=auth).status_code == 404
+
+
+# --------------------------------------------------------------------------
+# hand authoring — the template shipped to authors must publish as-is
+# --------------------------------------------------------------------------
+
+def test_hand_report_template_publishes(client, auth):
+    import json as _json
+    from pathlib import Path
+
+    tpl = Path(__file__).resolve().parents[2] / "web" / "public" / "modele-rapport.json"
+    doc_ = _json.loads(tpl.read_text())
+    client.post("/v1/orgs", json={"id": "pvak", "name": "PVAK", "sub": {"fr": "Mwebe"}},
+                headers=auth)
+    r = client.post("/v1/orgs/pvak/reports", json=doc_, headers=auth)
+    assert r.status_code == 201, r.text
+    # the hand path holds the same line as the machine path: no value
+    # without a source cell, and both locales filled throughout
+    for b in doc_["blocks"]:
+        for it in b.get("items", []):
+            assert it["value"]["src"]["cells"]
+            assert it["label"]["fr"] and it["label"]["en"]
