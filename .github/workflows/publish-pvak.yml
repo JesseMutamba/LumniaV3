@@ -55,10 +55,22 @@ jobs:
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             --data-binary @org.json); echo "org: $code"
 
-          code=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT "$API/studio/orgs/pvak/context" \
+          # A context is refused whole when it names something the deployed
+          # build does not know — by design, so nothing is silently dropped.
+          # Wait for the build that carries the modules this context needs
+          # rather than racing the deploy.
+          for i in $(seq 1 40); do
+            if curl -sS -m 20 "$API/studio/modules" -H "Authorization: Bearer $TOKEN" \
+               | python3 -c "import sys,json;n={m['name'] for m in json.load(sys.stdin)};exit(0 if {'trajectory','efficiency'} <= n else 1)" 2>/dev/null; then
+              echo "deployed build carries the modules"; break
+            fi
+            echo "waiting for the deploy to carry trajectory+efficiency ($i)"; sleep 20
+          done
+
+          code=$(curl -sS -o ctx.json -w "%{http_code}" -X PUT "$API/studio/orgs/pvak/context" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             --data-binary @context.json); echo "context: $code"
-          [ "$code" = "200" ] || exit 1
+          [ "$code" = "200" ] || { head -c 400 ctx.json; exit 1; }
 
           # Analysing on the live service retains the workbooks and records the
           # run, so the ask surface and the tiles can answer from these books.
