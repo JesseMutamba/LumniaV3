@@ -65,7 +65,24 @@ jobs:
           # would, with only the key, and assert a published report comes back.
           # Keys are masked — this log is public.
           if [ -z "$TOKEN" ]; then echo "no token - skipping portal check"; exit 0; fi
-          curl -sS -m 30 "$API/studio/orgs" -H "Authorization: Bearer $TOKEN" -o orgs.json
+          # A gateway error during Render's swap window is the deploy in
+          # progress, not a broken link. Retry those; a 4xx is a real answer
+          # and fails immediately. Without this the check cries wolf on every
+          # deploy, and a check people learn to ignore is worse than none.
+          get() { # get <url> <outfile> [auth]
+            for _ in 1 2 3 4 5 6 7 8; do
+              if [ "$3" = "auth" ]; then
+                c=$(curl -sS -o "$2" -w "%{http_code}" -m 30 "$1" -H "Authorization: Bearer $TOKEN" || echo 000)
+              else
+                c=$(curl -sS -o "$2" -w "%{http_code}" -m 30 "$1" || echo 000)
+              fi
+              case "$c" in 000|502|503|504) echo "  $c - deploy in progress, retrying in 15s" >&2; sleep 15;;
+                           *) echo "$c"; return 0;; esac
+            done
+            echo "$c"
+          }
+          code=$(get "$API/studio/orgs" orgs.json auth)
+          test "$code" = "200"
           # Every client, not just the first: an empty client sorted to the top
           # would otherwise be the link that gets handed out.
           python3 -c "import json;[print('::add-mask::'+o['share_key']) for o in json.load(open('orgs.json'))]"
@@ -74,7 +91,7 @@ jobs:
           for i in $(seq 0 $((n - 1))); do
             org=$(python3 -c "import json;print(json.load(open('orgs.json'))[$i]['id'])")
             key=$(python3 -c "import json;print(json.load(open('orgs.json'))[$i]['share_key'])")
-            code=$(curl -sS -o "portal-$i.json" -w "%{http_code}" -m 30 "$API/portal/$org?k=$key")
+            code=$(get "$API/portal/$org?k=$key" "portal-$i.json")
             echo "portal $org -> HTTP $code"
             test "$code" = "200"
           done
