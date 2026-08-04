@@ -312,6 +312,7 @@ class ContextIn(BaseModel):
     reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
     metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
     journal_code_column: str | None = None  # header of the routing-code column ("CODE")
+    retain_files: bool = True            # keep the workbooks so questions can be asked of them
 
 
 class Context(ContextIn):

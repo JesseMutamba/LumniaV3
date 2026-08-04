@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .bootstrap import bootstrap
-from .routers import ingest, reports
+from .routers import ask, ingest, reports
 from .schema import BLOCK_TYPES
 
 VERSION = "0.2.0"
@@ -43,6 +43,7 @@ app.add_middleware(
 
 app.include_router(reports.router, prefix="/v1")
 app.include_router(ingest.router, prefix="/v1")
+app.include_router(ask.router, prefix="/v1")
 
 
 @app.get("/v1/health", tags=["meta"])
