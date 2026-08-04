@@ -80,3 +80,5 @@ jobs:
           KEY=$(python3 -c "import json;print(json.load(open('publish.json'))['share_key'])")
           echo "::add-mask::$KEY"
           echo "Published pvak-t1-2026-position. The links carry secret keys and live in Studio: panel 05 for the portal link, panel 04 after opening the report."
+
+# re-run: the live service now carries the trajectory module
