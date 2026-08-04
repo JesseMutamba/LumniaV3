@@ -323,6 +323,20 @@ class TimelineDef(BaseModel):
     definition: Text | None = None
 
 
+class HistoryDef(BaseModel):
+    """Named monthly rows to chart together — a season already closed, or
+    any run of months the client keeps as a row per measure. The month each
+    column belongs to is read from the sheet's own header, because a series
+    that starts in July must not be drawn from January."""
+
+    model_config = ConfigDict(extra="forbid")
+    sheet: str
+    rows: dict[str, str]             # display name -> row label in the sheet
+    unit: Unit = "t"
+    months_row: int | None = None    # 1-based; detected when absent
+    note: Text | None = None
+
+
 class ContextIn(BaseModel):
     """What the author saves: the client's parsing knowledge.
 
@@ -344,6 +358,7 @@ class ContextIn(BaseModel):
     metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
     ratios: dict[str, RatioDef] = {}     # rates between two metrics
     timelines: dict[str, TimelineDef] = {}  # multi-year plan summaries
+    histories: dict[str, HistoryDef] = {}   # closed monthly series to chart
     journal_code_column: str | None = None  # header of the routing-code column ("CODE")
     retain_files: bool = True            # keep the workbooks so questions can be asked of them
 

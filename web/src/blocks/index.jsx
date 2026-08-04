@@ -328,10 +328,17 @@ const Table = ({ b, locale, sources }) => (
         </tbody>
       </table>
     </div>
-    <div className="src-note">
-      {locale === 'fr' ? 'Source' : 'Source'}
-      <Prov src={b.rows?.[0]?.[b.columns[1]?.key]?.src} sources={sources} />
-    </div>
+    {/* A bare "Source" label with nothing after it promises provenance and
+        then withholds it. A table of prose has no cells to point at. */}
+    {b.rows?.some((r) => b.columns.some((c) => r[c.key]?.src)) && (
+      <div className="src-note">
+        {locale === 'fr' ? 'Source' : 'Source'}
+        <Prov
+          src={b.columns.map((c) => b.rows[0]?.[c.key]?.src).find(Boolean)}
+          sources={sources}
+        />
+      </div>
+    )}
   </div>
 )
 

@@ -380,8 +380,8 @@ td.pos{color:var(--gold)}
 @media(max-width:900px){.ask-form{grid-template-columns:1fr}}
 
 /* report dashboard lens */
-.lens{display:inline-flex;border:1px solid var(--line-soft);border-radius:3px;
-  overflow:hidden;margin:0 0 34px}
+.lens{display:flex;flex-wrap:wrap;border:1px solid var(--line-soft);border-radius:3px;
+  overflow:hidden;margin:0 0 34px;width:fit-content;max-width:100%}
 .lens button{appearance:none;background:none;border:0;padding:10px 22px;
   font-family:var(--mono);font-weight:500;font-size:10px;line-height:1;
   letter-spacing:.22em;text-transform:uppercase;color:var(--mut-5);cursor:pointer}
