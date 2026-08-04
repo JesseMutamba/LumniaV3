@@ -23,3 +23,6 @@ services:
         value: /data/lumnia.db
       - key: LUMNIA_ADMIN_TOKEN
         generateValue: true # view it in the dashboard: lumnia-api → Environment
+      - key: ANTHROPIC_API_KEY
+        sync: false # set the value in the dashboard; enables Claude narration.
+        # Declared here so Blueprint syncs never remove it.

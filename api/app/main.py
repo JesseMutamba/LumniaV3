@@ -54,6 +54,8 @@ def health():
         "orgs": len(store.list_orgs()),
         "reports": len(store.list_reports()),
         "publishing_enabled": bool(os.getenv("LUMNIA_ADMIN_TOKEN")),
+        # presence only, never the value: is the Claude narration polish on?
+        "narration": "claude" if os.getenv("ANTHROPIC_API_KEY") else "templates",
     }
 
 
