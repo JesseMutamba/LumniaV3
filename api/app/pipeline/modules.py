@@ -17,11 +17,14 @@ from datetime import date, datetime
 from typing import Callable
 
 from ..schema import (
+    BarPair,
     Flag,
     Kpi,
     KpiGrid,
     Rail,
     RailRow,
+    Series,
+    SeriesDef,
     Src,
     Table,
     Text,
@@ -40,14 +43,15 @@ class Module:
     version: str
     description_fr: str
     description_en: str
-    run: Callable  # (wb, tables, ctx, extras) -> list[blocks]
+    run: Callable  # (wbs, tables, ctx, extras) -> list[blocks]
+    # wbs: every workbook in the session; tables: [(file_idx, DetectedTable)]
 
 
 # --------------------------------------------------------------------------
 # movements — the recurring-ingestion delta, as a named product
 # --------------------------------------------------------------------------
 
-def _run_movements(wb: Workbook, tables, ctx, extras) -> list:
+def _run_movements(wbs: list[Workbook], tables, ctx, extras) -> list:
     delta = extras.get("delta")
     if not delta or not delta.get("alerts"):
         return []
@@ -85,12 +89,13 @@ def _find_col(t: DetectedTable, words) -> object | None:
     return None
 
 
-def _run_execution(wb: Workbook, tables, ctx, extras) -> list:
+def _run_execution(wbs: list[Workbook], tables, ctx, extras) -> list:
     """For every table carrying a budget column and an actual column: the
     execution rail per line, and total execution computed as a ratio of
     totals — sum over sum, the only honest way to aggregate a rate."""
     blocks: list = []
-    for t in tables:
+    for idx, t in tables:
+        wb = wbs[idx]
         b_col, a_col = _find_col(t, BUDGET_WORDS), _find_col(t, ACTUAL_WORDS)
         text_cols = [c for c in t.columns if c.kind == "text"]
         if not b_col or not a_col or not text_cols:
@@ -182,7 +187,7 @@ def _date_amount_rows(wb: Workbook, t: DetectedTable) -> list[tuple]:
     return out
 
 
-def _run_reconciliation(wb: Workbook, tables, ctx, extras) -> list:
+def _run_reconciliation(wbs: list[Workbook], tables, ctx, extras) -> list:
     """Match rows across journal tables on (date, amount). The same money
     recorded in two journals is the classic double-count; here it becomes a
     table the author can take to finance, every line pointing at both cells.
@@ -191,18 +196,18 @@ def _run_reconciliation(wb: Workbook, tables, ctx, extras) -> list:
     guess: context.reconcile_sheets names them. Left empty, every detected
     table with dates is considered — noisier, but nothing is hidden."""
     wanted = {_norm(s) for s in (ctx.reconcile_sheets if ctx else [])}
-    pool = [t for t in tables if not wanted or _norm(t.sheet) in wanted]
-    journals = [(t, _date_amount_rows(wb, t)) for t in pool]
-    journals = [(t, rows) for t, rows in journals if rows]
+    pool = [(idx, t) for idx, t in tables if not wanted or _norm(t.sheet) in wanted]
+    journals = [(idx, t, _date_amount_rows(wbs[idx], t)) for idx, t in pool]
+    journals = [(idx, t, rows) for idx, t, rows in journals if rows]
     if len(journals) < 2:
         return []
     matches: list[dict] = []
     seen: set = set()
     for i in range(len(journals)):
         for j in range(i + 1, len(journals)):
-            t1, rows1 = journals[i]
-            t2, rows2 = journals[j]
-            if t1.sheet == t2.sheet:
+            f1, t1, rows1 = journals[i]
+            f2, t2, rows2 = journals[j]
+            if f1 == f2 and t1.sheet == t2.sheet:
                 continue
             index = {}
             for day, amt, r, c, sh in rows1:
@@ -218,22 +223,23 @@ def _run_reconciliation(wb: Workbook, tables, ctx, extras) -> list:
                 r1, c1, sh1 = hits[0]
                 matches.append(
                     {"day": day, "amt": amt,
-                     "a": (sh1, r1, c1), "b": (sh2, r2, c2)}
+                     "a": (f1, sh1, r1, c1), "b": (f2, sh2, r2, c2)}
                 )
     if not matches:
         return []
     total = sum(m["amt"] for m in matches)
     rows = []
     for m in matches[:MAX_RECON_ROWS]:
+        fa, sha, ra, ca = m["a"]
+        fb, shb, rb, cb = m["b"]
         rows.append(
             {
                 "date": str(m["day"]),
                 "amount": Value(
                     n=m["amt"], unit="none",
-                    src=Src(file=wb.source.idx, sheet=m["a"][0],
-                            cells=a1(m["a"][1], m["a"][2])),
+                    src=Src(file=wbs[fa].source.idx, sheet=sha, cells=a1(ra, ca)),
                 ),
-                "also": f"{m['b'][0]}!{a1(m['b'][1], m['b'][2])}",
+                "also": f"{shb}!{a1(rb, cb)}",
             }
         )
     blocks: list = [
@@ -262,6 +268,144 @@ def _run_reconciliation(wb: Workbook, tables, ctx, extras) -> list:
 
 
 # --------------------------------------------------------------------------
+# budget-vs-actual — the phased comparison, across files
+# --------------------------------------------------------------------------
+
+def _find_series(wbs: list[Workbook], sd: SeriesDef):
+    """Locate the row the context describes: (workbook, sheet name, row,
+    [(col, value), ...]). Numeric cells left to right; leading cells dropped
+    per `skip`; an annual-total column (first ≈ sum of the rest) is dropped
+    automatically."""
+    for wb in wbs:
+        for name, sheet in wb.sheets.items():
+            if _norm(name) != _norm(sd.sheet):
+                continue
+            for r in range(1, sheet.rows + 1):
+                row = sheet.grid[r - 1] or []
+                if not any(
+                    isinstance(c, str) and _norm(sd.label) in _norm(c)
+                    for c in row[:4]
+                    if isinstance(c, str)
+                ):
+                    continue
+                cells = [
+                    (ci + 1, float(v)) for ci, v in enumerate(row) if _is_num(v)
+                ]
+                cells = _trim_totals(cells[sd.skip:])
+                if cells:
+                    return wb, name, r, cells
+    return None
+
+
+def _trim_totals(cells: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """Drop total columns bracketing the months. Real budget rows carry the
+    annual figure before the months, after them, or both — a total is any
+    end cell that equals the sum of what it brackets, within 1%."""
+    def close(a: float, b: float) -> bool:
+        return bool(a) and abs(a - b) <= abs(a) * 0.01
+
+    # annual at both ends: head == tail == sum of the middle
+    if (
+        len(cells) >= 5
+        and close(cells[0][1], cells[-1][1])
+        and close(cells[0][1], sum(v for _, v in cells[1:-1]))
+    ):
+        cells = cells[1:-1]
+    changed = True
+    while changed and len(cells) >= 4:
+        changed = False
+        if close(cells[0][1], sum(v for _, v in cells[1:])):
+            cells = cells[1:]
+            changed = True
+        elif close(cells[-1][1], sum(v for _, v in cells[:-1])):
+            cells = cells[:-1]
+            changed = True
+    return cells
+
+
+def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
+    """For each metric the context declares: align the budget and actual
+    monthly series from wherever they live, compare over the months the
+    actuals cover — phased budget, never the annual rate — and compute
+    execution as a ratio of totals. Both defects the manual analysis found
+    in the client's own reporting, encoded as the definition."""
+    if not ctx or not getattr(ctx, "metrics", None):
+        return []
+    blocks: list = []
+    for mname, mdef in ctx.metrics.items():
+        found_b = _find_series(wbs, mdef.budget)
+        found_a = _find_series(wbs, mdef.actual)
+        if not found_b or not found_a:
+            continue
+        bwb, bsheet, brow, bcells = found_b
+        awb, asheet, arow, acells = found_a
+        n = min(len(acells), len(bcells))
+        if n == 0:
+            continue
+        sum_a = sum(v for _, v in acells[:n])
+        sum_b = sum(v for _, v in bcells[:n])
+        if not sum_b:
+            continue
+        pct = round(sum_a / sum_b * 100, 1)
+        a_range = a1_range(arow, acells[0][0], arow, acells[n - 1][0])
+        fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
+        blocks.append(
+            KpiGrid(
+                items=[
+                    Kpi(
+                        label=Text(fr=f"Exécution · {mname}",
+                                   en=f"Execution · {mname}"),
+                        value=Value(
+                            n=pct, unit="pct", derived="ratio",
+                            src=Src(file=awb.source.idx, sheet=asheet,
+                                    cells=a_range),
+                        ),
+                        sub=Text(
+                            fr=f"{fmt(sum_a)} réels contre {fmt(sum_b)} de budget phasé sur {n} mois — ratio des totaux",
+                            en=f"{fmt(sum_a)} actual against {fmt(sum_b)} phased budget over {n} months — ratio of totals",
+                        ),
+                        tone="bad" if pct > 115 else "warn" if pct < 60 else "neutral",
+                    )
+                ]
+            )
+        )
+        m = min(len(bcells), 12)
+        blocks.append(
+            BarPair(
+                title=Text(fr=f"{mname} · budget contre réel",
+                           en=f"{mname} · budget vs actual"),
+                sub=Text(fr="mensuel", en="monthly"),
+                x="months",
+                series=[
+                    Series(
+                        key="plan",
+                        label=Text(fr="Budget", en="Budget"),
+                        values=[
+                            Value(n=v, unit=mdef.unit,
+                                  src=Src(file=bwb.source.idx, sheet=bsheet,
+                                          cells=a1(brow, c)))
+                            for c, v in bcells[:m]
+                        ],
+                    ),
+                    Series(
+                        key="act",
+                        label=Text(fr="Réel", en="Actual"),
+                        values=[
+                            Value(n=v, unit=mdef.unit,
+                                  src=Src(file=awb.source.idx, sheet=asheet,
+                                          cells=a1(arow, c)))
+                            for c, v in acells[:min(len(acells), m)]
+                        ],
+                    ),
+                ],
+                cutoff=min(n, m),
+                fmt="k",
+            )
+        )
+    return blocks
+
+
+# --------------------------------------------------------------------------
 # registry
 # --------------------------------------------------------------------------
 
@@ -283,6 +427,13 @@ MODULES: dict[str, Module] = {
             run=_run_execution,
         ),
         Module(
+            name="budget-vs-actual",
+            version="1.0",
+            description_fr="Compare les séries mensuelles budget et réel déclarées dans le contexte (metrics), sur budget phasé, en ratio des totaux — même entre deux classeurs.",
+            description_en="Compares the budget and actual monthly series the context declares (metrics), against phased budget, as a ratio of totals — even across two workbooks.",
+            run=_run_budget_actual,
+        ),
+        Module(
             name="reconciliation",
             version="1.0",
             description_fr="Écritures à même date et même montant dans deux journaux : le même argent compté deux fois.",
@@ -295,7 +446,7 @@ MODULES: dict[str, Module] = {
 DEFAULT_MODULES = ["movements"]
 
 
-def run_modules(names: list[str], wb: Workbook, tables, ctx, extras) -> tuple[list, list[str]]:
+def run_modules(names: list[str], wbs: list[Workbook], tables, ctx, extras) -> tuple[list, list[str]]:
     """Run the named modules in order; returns (blocks, attribution)."""
     blocks: list = []
     ran: list[str] = []
@@ -303,7 +454,7 @@ def run_modules(names: list[str], wb: Workbook, tables, ctx, extras) -> tuple[li
         mod = MODULES.get(name)
         if not mod:
             continue
-        out = mod.run(wb, tables, ctx, extras)
+        out = mod.run(wbs, tables, ctx, extras)
         if out:
             blocks.extend(out)
             ran.append(f"{mod.name} v{mod.version}")

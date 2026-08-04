@@ -253,15 +253,16 @@ def _table_block(
 
 
 def build_draft(
-    wb: Workbook,
-    tables: list[DetectedTable],
+    wbs: list[Workbook],
+    tables: list[tuple[int, DetectedTable]],
     org_id: str,
     ctx: Context | ContextIn | None = None,
 ) -> Report:
-    """A reviewable draft. Every number carries its cell; nothing is guessed."""
+    """A reviewable draft, possibly across several workbooks. Every number
+    carries its cell and its file; nothing is guessed."""
     today = date.today()
-    name = wb.source.filename
-    truncated = [t for t in tables if t.n_rows > MAX_ROWS]
+    name = " + ".join(wb.source.filename for wb in wbs)
+    truncated = [t for _, t in tables if t.n_rows > MAX_ROWS]
     ctx_version = getattr(ctx, "version", None)
 
     blocks: list = [
@@ -290,9 +291,11 @@ def build_draft(
                 )
             )
         )
-    for t in tables:
-        table, excluded = _table_block(wb, t, ctx)
+    for idx, t in tables:
+        table, excluded = _table_block(wbs[idx], t, ctx)
         pieces = [f"confiance {int(t.confidence * 100)} %", t.cells]
+        if len(wbs) > 1:
+            pieces.insert(0, wbs[idx].source.filename)
         if t.n_rows > MAX_ROWS:
             pieces.append(f"{t.n_rows - MAX_ROWS} ligne(s) tronquée(s)")
         if excluded:
@@ -330,6 +333,6 @@ def build_draft(
         status="draft",
         pipeline_version="0.3.0",
         default_locale="fr",
-        sources=[wb.source],
+        sources=[wb.source for wb in wbs],
         blocks=blocks,
     )

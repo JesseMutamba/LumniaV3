@@ -85,10 +85,10 @@ export default function Studio({ locale, onPublished }) {
   }
 
   async function analyse(e) {
-    const f = e.target.files?.[0]
+    const fs = [...(e.target.files || [])]
     e.target.value = ''
-    if (!f) return
-    const r = await run(() => api.ingestWorkbook(f, orgs[0]?.id))
+    if (!fs.length) return
+    const r = await run(() => api.ingestWorkbook(fs, orgs[0]?.id))
     if (r) setInv(r)
   }
 
@@ -191,14 +191,14 @@ export default function Studio({ locale, onPublished }) {
         </div>
         <p>
           {L
-            ? 'Déposez un classeur (.xlsx). La machine détecte les tableaux, écrit un brouillon de rapport où chaque valeur porte déjà sa cellule source, et vous le rend pour relecture.'
-            : 'Drop a workbook (.xlsx). The machine detects the tables, writes a draft report in which every value already carries its source cell, and hands it back for review.'}
+            ? 'Déposez un ou plusieurs classeurs (.xlsx) — budget et réel côte à côte. La machine détecte les tableaux, exécute les modules du contexte, et écrit un brouillon où chaque valeur porte sa cellule et son fichier source.'
+            : 'Drop one or several workbooks (.xlsx) — budget and actuals side by side. The machine detects the tables, runs the context’s modules, and writes a draft in which every value carries its source cell and file.'}
         </p>
         <label className="drop">
-          <input type="file" accept=".xlsx,.xlsm" onChange={analyse} hidden />
+          <input type="file" accept=".xlsx,.xlsm" multiple onChange={analyse} hidden />
           {busy
             ? L ? 'Analyse…' : 'Analysing…'
-            : L ? 'Choisir un classeur .xlsx' : 'Choose an .xlsx workbook'}
+            : L ? 'Choisir un ou des classeurs .xlsx' : 'Choose .xlsx workbook(s)'}
         </label>
         {inv && (
           <div className="det">

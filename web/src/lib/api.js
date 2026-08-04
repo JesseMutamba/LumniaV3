@@ -70,9 +70,9 @@ export function importReport(file) {
   return req('/studio/import', { method: 'POST', body: fd, auth: true, raw: true })
 }
 
-export function ingestWorkbook(file, orgId) {
+export function ingestWorkbook(files, orgId) {
   const fd = new FormData()
-  fd.append('file', file)
+  for (const f of Array.isArray(files) ? files : [files]) fd.append('file', f)
   return req(`/studio/ingest?org=${encodeURIComponent(orgId || 'client')}`, {
     method: 'POST',
     body: fd,

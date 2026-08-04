@@ -511,3 +511,56 @@ def test_reconciliation_module_finds_the_double_count(client, auth):
     amounts = {r["amount"]["n"] for r in recon["rows"]}
     assert amounts == {45600.0, 14751.0}
     assert all(r["amount"]["src"]["cells"] for r in recon["rows"])
+
+
+# ----------------------------------------------------- budget-vs-actual ---
+
+def _ingest_many(client, auth, workbooks: list[dict], org):
+    files = [("file", (f"wb{i}.xlsx", io.BytesIO(_xlsx(w)), "application/x"))
+             for i, w in enumerate(workbooks)]
+    return client.post(f"/v1/studio/ingest?org={org}", files=files, headers=auth)
+
+
+def test_budget_vs_actual_across_two_files(client, auth):
+    client.post("/v1/orgs", json={"id": "bva", "name": "BvA", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/bva/context", json={
+        "modules": ["budget-vs-actual"],
+        "metrics": {
+            "OPEX": {
+                "budget": {"sheet": "opex", "label": "TOTAL DEPENSES"},
+                "actual": {"sheet": "reel", "label": "TOTAL SITE"},
+                "unit": "USD",
+            }
+        },
+    }, headers=auth)
+    budget_wb = {"opex": [
+        ["Poste", "Annuel", "Jan", "Fév", "Mar", "Avr"],
+        ["Salaires", 260, 60, 70, 70, 60],
+        ["TOTAL DEPENSES OPEX", 400, 100, 100, 100, 100],  # annual col auto-dropped
+    ]}
+    actual_wb = {"reel": [
+        ["Opération", "Jan", "Fév", "Mar"],
+        ["Plantations", 10, 20, 10],
+        ["TOTAL SITE", 20, 50, 50],
+    ]}
+    body = _ingest_many(client, auth, [budget_wb, actual_wb], "bva").json()
+    assert any(m.startswith("budget-vs-actual") for m in body["modules_run"])
+    assert len(body["sources"]) == 2
+
+    kpi = next(b for b in body["draft"]["blocks"] if b["type"] == "kpiGrid"
+               and "OPEX" in b["items"][0]["label"]["fr"])
+    v = kpi["items"][0]["value"]
+    assert v["n"] == pytest.approx(120 / 300 * 100, abs=0.1)  # phased 3 months, ratio of totals
+    assert v["src"]["file"] == 1                              # actuals live in file 1
+
+    bar = next(b for b in body["draft"]["blocks"] if b["type"] == "barPair")
+    plan, act = bar["series"]
+    assert plan["values"][0]["src"]["file"] == 0              # budget cells from file 0
+    assert plan["values"][0]["n"] == 100 and len(plan["values"]) == 4
+    assert act["values"][0]["src"]["file"] == 1 and len(act["values"]) == 3
+    assert bar["cutoff"] == 3
+
+    # the machine draft with cross-file provenance publishes as-is
+    r = client.post("/v1/orgs/bva/reports", json=body["draft"], headers=auth)
+    assert r.status_code == 201

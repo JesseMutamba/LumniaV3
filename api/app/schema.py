@@ -250,6 +250,28 @@ class Org(BaseModel):
     report_count: int = 0
 
 
+class SeriesDef(BaseModel):
+    """Where a monthly series lives: a sheet, and the label of its row. The
+    series is every numeric cell across that row, left to right. `skip`
+    drops leading cells (an annual-total column ahead of the months); when
+    the first cell equals the sum of the rest it is dropped automatically."""
+
+    model_config = ConfigDict(extra="forbid")
+    sheet: str
+    label: str
+    skip: int = Field(default=0, ge=0)
+
+
+class MetricDef(BaseModel):
+    """A named budget-vs-actual comparison. Budget and actual may live in
+    different workbooks — provenance carries the file either way."""
+
+    model_config = ConfigDict(extra="forbid")
+    budget: SeriesDef
+    actual: SeriesDef
+    unit: Unit = "USD"
+
+
 class ContextIn(BaseModel):
     """What the author saves: the client's parsing knowledge.
 
@@ -268,6 +290,7 @@ class ContextIn(BaseModel):
     alert_threshold_pct: float = Field(default=20.0, ge=0)  # re-ingest movement alert
     modules: list[str] = ["movements"]   # named analyses run on every ingest
     reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
+    metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
 
 
 class Context(ContextIn):
