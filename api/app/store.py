@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS contexts (
   doc        TEXT NOT NULL,    -- json ContextIn
   PRIMARY KEY (org, version)
 );
+CREATE TABLE IF NOT EXISTS ingestions (
+  org      TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  seq      INTEGER NOT NULL,   -- per (org, filename); the recurrence counter
+  ts       TEXT NOT NULL,
+  sha256   TEXT,
+  summary  TEXT NOT NULL,      -- json snapshot of detected tables
+  PRIMARY KEY (org, filename, seq)
+);
 CREATE TABLE IF NOT EXISTS reads (
   ts     TEXT NOT NULL,
   kind   TEXT NOT NULL,        -- 'report' | 'portal'
@@ -150,6 +159,52 @@ def get_context(org_id: str) -> Context | None:
     return Context(
         **json.loads(row["doc"]), version=row["version"], updated_at=row["created_at"]
     )
+
+
+# --------------------------------------------------------------------------
+# ingestions — the recurrence memory. Each ingest of (org, filename) appends
+# a snapshot, so the next ingest of the same file can answer "what moved".
+# --------------------------------------------------------------------------
+
+def put_ingestion(org_id: str, filename: str, sha256: str | None, summary: dict) -> int:
+    from datetime import datetime, timezone
+
+    with connect() as con:
+        row = con.execute(
+            "SELECT COALESCE(MAX(seq), 0) AS s FROM ingestions "
+            "WHERE org = ? AND filename = ?",
+            (org_id, filename),
+        ).fetchone()
+        seq = row["s"] + 1
+        con.execute(
+            "INSERT INTO ingestions (org, filename, seq, ts, sha256, summary) "
+            "VALUES (?,?,?,?,?,?)",
+            (org_id, filename, seq, datetime.now(timezone.utc).isoformat(),
+             sha256, json.dumps(summary)),
+        )
+    return seq
+
+
+def last_ingestion(org_id: str, filename: str) -> dict | None:
+    with connect() as con:
+        row = con.execute(
+            "SELECT seq, ts, summary FROM ingestions "
+            "WHERE org = ? AND filename = ? ORDER BY seq DESC LIMIT 1",
+            (org_id, filename),
+        ).fetchone()
+    if not row:
+        return None
+    return {"seq": row["seq"], "ts": row["ts"], "summary": json.loads(row["summary"])}
+
+
+def list_ingestions(org_id: str) -> list[dict]:
+    with connect() as con:
+        rows = con.execute(
+            "SELECT filename, seq, ts, sha256 FROM ingestions "
+            "WHERE org = ? ORDER BY ts DESC",
+            (org_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # --------------------------------------------------------------------------

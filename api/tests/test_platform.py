@@ -396,3 +396,53 @@ def test_public_reads_are_rate_limited(client, auth, org, monkeypatch):
         assert client.get(f"/v1/reports/r-lim?k={key}").status_code == 200
     assert client.get(f"/v1/reports/r-lim?k={key}").status_code == 429
     auth_mod._hits.clear()
+
+
+# ------------------------------------------------- recurring ingestion ---
+
+def test_recurring_ingest_diffs_the_previous_snapshot(client, auth):
+    client.post("/v1/orgs", json={"id": "recur", "name": "Recur", "sub": {"fr": "Kin"}},
+                headers=auth)
+    first = _ingest(client, auth, BUDGET_SHEET, org="recur").json()["ingestion"]
+    assert first["seq"] == 1 and first["previous_ts"] is None and first["changes"] == []
+
+    changed = {
+        "budget": [
+            ["Poste", "Budget USD", "Réel USD"],
+            ["Semences", 12000, 14500],       # réel +52.6% → alert
+            ["Engrais", 8000, 8200],          # +1.2% → change, no alert
+            ["Transport", 5000, 2200],        # unchanged
+            ["Irrigation", 4000, 0],          # new row → note
+        ]                                     # "Main d'œuvre" gone → note
+    }
+    second = _ingest(client, auth, changed, org="recur").json()
+    d = second["ingestion"]
+    assert d["seq"] == 2 and d["previous_ts"]
+    cols = {(c["label"], c["column"]): c for c in d["changes"]}
+    assert cols[("Semences", "Réel USD")]["pct"] == pytest.approx(52.6, abs=0.1)
+    assert ("Engrais", "Réel USD") in cols
+    alerts = {(a["label"], a["column"]) for a in d["alerts"]}
+    assert ("Semences", "Réel USD") in alerts
+    assert ("Engrais", "Réel USD") not in alerts     # below the 20% default
+    joined = " ".join(d["notes"])
+    assert "Irrigation" in joined and "Main d'œuvre" in joined
+
+    # the draft carries the movement flag for review
+    flag = next(b for b in second["draft"]["blocks"] if b["type"] == "flag")
+    assert flag["severity"] == "warn" and "Semences" in flag["body"]["fr"]
+
+    # retention: both ingests are on record
+    hist = client.get("/v1/studio/orgs/recur/ingestions", headers=auth).json()
+    assert [h["seq"] for h in hist] == [2, 1] or [h["seq"] for h in hist] == [1, 2]
+
+
+def test_alert_threshold_comes_from_the_context(client, auth):
+    client.post("/v1/orgs", json={"id": "sens", "name": "Sens", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/sens/context",
+               json={"alert_threshold_pct": 1}, headers=auth)
+    _ingest(client, auth, BUDGET_SHEET, org="sens")
+    changed = {"budget": [r[:] for r in BUDGET_SHEET["budget"]]}
+    changed["budget"][2] = ["Engrais", 8000, 8200]   # +1.2% — alerts at 1%
+    d = _ingest(client, auth, changed, org="sens").json()["ingestion"]
+    assert any(a["label"] == "Engrais" for a in d["alerts"])

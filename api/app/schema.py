@@ -265,6 +265,7 @@ class ContextIn(BaseModel):
     units: dict[str, Unit] = {}          # header text -> unit, exact match wins
     aliases: dict[str, str] = {}         # label as written -> canonical label
     exclude_labels: list[str] = []       # rows whose label matches are dropped
+    alert_threshold_pct: float = Field(default=20.0, ge=0)  # re-ingest movement alert
 
 
 class Context(ContextIn):

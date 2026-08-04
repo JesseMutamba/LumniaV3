@@ -226,6 +226,43 @@ export default function Studio({ locale, onPublished }) {
                   : 'No tables detected — the workbook may be empty or never recalculated by Excel.'}
               </div>
             )}
+            {inv.ingestion && (
+              <div className="delta">
+                <div className="delta-h">
+                  {L ? 'ingestion' : 'ingest'} #{inv.ingestion.seq}
+                  {inv.ingestion.previous_ts &&
+                    ` · ${L ? 'précédente le' : 'previous on'} ${String(inv.ingestion.previous_ts).slice(0, 10)}`}
+                  {inv.ingestion.seq > 1 &&
+                    inv.ingestion.changes.length === 0 &&
+                    inv.ingestion.notes.length === 0 &&
+                    ` · ${L ? 'aucun changement' : 'no changes'}`}
+                </div>
+                {inv.ingestion.alerts.map((a, i) => (
+                  <div className="delta-row alert" key={i}>
+                    <span>
+                      {a.sheet} · {a.label} · {a.column}
+                    </span>
+                    <span>
+                      {a.before} → {a.after}
+                      {a.pct != null && ` (${a.pct > 0 ? '+' : ''}${a.pct} %)`}
+                    </span>
+                  </div>
+                ))}
+                {inv.ingestion.changes.length > inv.ingestion.alerts.length && (
+                  <div className="delta-row">
+                    <span>
+                      {inv.ingestion.changes.length - inv.ingestion.alerts.length}{' '}
+                      {L ? 'autre(s) changement(s) sous le seuil' : 'other change(s) below the threshold'}
+                    </span>
+                  </div>
+                )}
+                {inv.ingestion.notes.map((n, i) => (
+                  <div className="delta-row" key={`n${i}`}>
+                    <span>{n}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {inv.draft && (
               <>
                 <button className="drop det-dl" onClick={downloadDraft}>

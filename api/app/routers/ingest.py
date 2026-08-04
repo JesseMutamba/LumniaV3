@@ -16,14 +16,14 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from .. import store
+from ..auth import require_author
 from ..pipeline.checks import detect_rollup_hierarchy
 from ..pipeline.ingest import read_workbook
 from ..pipeline.parse import build_draft, detect_tables
-from ..schema import Report, Source
+from ..pipeline.recur import diff, snapshot
+from ..schema import Flag, Report, Source, Text
 
 router = APIRouter()
-
-from ..auth import require_author  # noqa: E402
 author = Depends(require_author)
 
 ALLOWED = {".xlsx", ".xlsm"}
@@ -52,6 +52,32 @@ class TableInfo(BaseModel):
     notes: list[str] = []
 
 
+class ValueChange(BaseModel):
+    sheet: str
+    label: str
+    column: str
+    before: float
+    after: float
+    pct: float | None = None
+
+
+class IngestionDelta(BaseModel):
+    """What this ingest sees that the previous one of the same file didn't."""
+
+    seq: int
+    previous_ts: str | None = None
+    changes: list[ValueChange] = []
+    alerts: list[ValueChange] = []
+    notes: list[str] = []
+
+
+class IngestionRecord(BaseModel):
+    filename: str
+    seq: int
+    ts: str
+    sha256: str | None = None
+
+
 class Inventory(BaseModel):
     source: Source
     sheets: list[SheetInfo]
@@ -59,6 +85,7 @@ class Inventory(BaseModel):
     needs_review: bool
     tables: list[TableInfo] = []
     draft: Report | None = None
+    ingestion: IngestionDelta | None = None
 
 
 @router.post(
@@ -139,6 +166,42 @@ async def ingest(file: UploadFile = File(...), org: str = Query(default="client"
     detected = detect_tables(wb, ctx)
     draft = build_draft(wb, detected, org, ctx) if detected else None
 
+    # Recurring ingestion: remember this ingest, and if we've seen this file
+    # for this client before, answer "what moved" — alerts beyond the
+    # client's threshold, structural changes as notes.
+    ingestion = None
+    if detected and store.get_org(org):
+        snap = snapshot(wb, detected)
+        prev = store.last_ingestion(org, wb.source.filename)
+        seq = store.put_ingestion(org, wb.source.filename, wb.source.sha256, snap)
+        if prev:
+            threshold = ctx.alert_threshold_pct if ctx else 20.0
+            d = diff(prev["summary"], snap, threshold)
+            ingestion = IngestionDelta(seq=seq, previous_ts=prev["ts"], **d)
+            if ingestion.alerts and draft:
+                # The movements go into the draft as a flag the author reviews
+                # — narrated deltas, not values, because a delta is commentary
+                # on two workbooks, not a figure from one.
+                lines = "; ".join(
+                    f"{a.sheet} · {a.label} · {a.column} : {a.before:g} → {a.after:g}"
+                    + (f" ({a.pct:+.1f} %)" if a.pct is not None else "")
+                    for a in ingestion.alerts[:8]
+                )
+                draft.blocks.insert(
+                    1,
+                    Flag(
+                        severity="warn",
+                        tag=Text(fr="Mouvement détecté", en="Movement detected"),
+                        title=Text(
+                            fr=f"{len(ingestion.alerts)} valeur(s) ont bougé depuis l'ingestion précédente",
+                            en=f"{len(ingestion.alerts)} value(s) moved since the previous ingest",
+                        ),
+                        body=Text(fr=lines),
+                    ),
+                )
+        else:
+            ingestion = IngestionDelta(seq=seq)
+
     return Inventory(
         source=wb.source,
         sheets=sheets,
@@ -156,4 +219,18 @@ async def ingest(file: UploadFile = File(...), org: str = Query(default="client"
             for t in detected
         ],
         draft=draft,
+        ingestion=ingestion,
     )
+
+
+@router.get(
+    "/studio/orgs/{org_id}/ingestions",
+    response_model=list[IngestionRecord],
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_ingestions(org_id: str):
+    """The retention record: every ingest for this client, newest first."""
+    if not store.get_org(org_id):
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    return [IngestionRecord(**r) for r in store.list_ingestions(org_id)]
