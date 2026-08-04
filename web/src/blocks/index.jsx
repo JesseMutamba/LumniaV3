@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import Prov from './Prov.jsx'
 import { fmt, signed, t, nf, MONTHS } from '../lib/format.js'
 
@@ -23,20 +24,60 @@ const Prose = ({ b, locale }) => (
 
 /* ------------------------------------------------------------------ kpis */
 
+function KpiCard({ it, locale, sources }) {
+  const [open, setOpen] = useState(false)
+  const L = locale === 'fr'
+  const deep = it.lineage?.length > 0 || it.definition || it.methodology
+  const src = it.value.src
+  const file = sources?.[src?.file]?.filename
+  return (
+    <div className="kpi">
+      <div className="k">{t(it.label, locale)}</div>
+      <div className={`v ${it.tone}`}>
+        {it.value.derived === 'delta' ? signed(it.value, locale) : fmt(it.value, locale)}
+      </div>
+      <div className="s">
+        {t(it.sub, locale)}
+        <Prov src={src} sources={sources} />
+      </div>
+      {deep && (
+        <button className="link drill-t" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? (L ? 'fermer' : 'close') : (L ? 'approfondir' : 'dive deeper')}
+        </button>
+      )}
+      {open && (
+        <div className="drill">
+          {it.definition && <p className="drill-def">{t(it.definition, locale)}</p>}
+          {it.methodology && <p className="drill-meth">{t(it.methodology, locale)}</p>}
+          {it.lineage?.length > 0 && (
+            <ol className="drill-steps">
+              {it.lineage.map((s, i) => (
+                <li key={i}>
+                  <span>{t(s.text, locale)}</span>
+                  <span className="drill-nums">
+                    {s.cells && <code>{s.cells}</code>}
+                    {s.n != null && <b>{nf(s.n, locale, Number.isInteger(s.n) ? 0 : 1)}</b>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {file && (
+            <div className="drill-src">
+              {L ? 'source' : 'source'} : {file} › {src.sheet} › {src.cells}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const KpiGrid = ({ b, locale, sources }) => (
   <div className="b">
     <div className="kpis">
       {b.items.map((it, i) => (
-        <div className="kpi" key={i}>
-          <div className="k">{t(it.label, locale)}</div>
-          <div className={`v ${it.tone}`}>
-            {it.value.derived === 'delta' ? signed(it.value, locale) : fmt(it.value, locale)}
-          </div>
-          <div className="s">
-            {t(it.sub, locale)}
-            <Prov src={it.value.src} sources={sources} />
-          </div>
-        </div>
+        <KpiCard key={i} it={it} locale={locale} sources={sources} />
       ))}
     </div>
   </div>

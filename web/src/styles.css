@@ -122,6 +122,22 @@ h3.b-t{font-size:24px;line-height:1.16}
 .kpi .v.warn,.kpi .v.bad{color:var(--terracotta)}
 .kpi .v.good{color:var(--gold)}
 .kpi .s{font-family:var(--mono);font-size:12px;line-height:1.4;color:var(--mut-6)}
+.drill-t{margin-top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase}
+.drill{margin-top:12px;border-top:1px solid var(--line-soft);padding-top:12px}
+.drill-def{font-family:var(--sans);font-size:13px;line-height:1.6;color:var(--ink);
+  margin:0 0 8px}
+.drill-meth{font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--mut-6);
+  margin:0 0 10px}
+.drill-steps{margin:0 0 10px;padding-left:18px}
+.drill-steps li{font-family:var(--sans);font-size:12.5px;line-height:1.55;
+  color:var(--mut-6);padding:4px 0}
+.drill-steps li::marker{color:var(--gold-dim);font-family:var(--mono);font-size:11px}
+.drill-nums{display:inline-flex;gap:10px;margin-left:8px;align-items:baseline}
+.drill-nums code{font-family:var(--mono);font-size:10.5px;color:var(--gold-dim);
+  letter-spacing:.05em}
+.drill-nums b{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--bright)}
+.drill-src{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--mut-42)}
 
 /* ------------------------------------------------------------------ rail */
 .rail{border:1px solid var(--line);border-radius:4px;background:var(--panel);padding:20px 22px}
