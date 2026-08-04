@@ -1,6 +1,6 @@
-# End-to-end smoke check: is the published site serving, and is the API
-# healthy? Runs after every push so a broken deploy is visible in Actions
-# without anyone having to open the site.
+# End-to-end smoke check: one Render service now serves both the web client
+# and the API. Runs after every push so a broken deploy is visible in
+# Actions without anyone having to open the site.
 name: Smoke check
 
 on:
@@ -12,22 +12,22 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Web client responds
-        run: |
-          code=$(curl -sS -o page.html -w "%{http_code}" -L https://jessemutamba.github.io/LumniaV3/)
-          echo "pages status: $code"
-          grep -o "<title>[^<]*</title>" page.html || true
-          test "$code" = "200"
       - name: API is healthy
         run: |
-          # Retry for up to ~3 minutes: a fresh Render deploy (or a hostname
-          # that just changed hands) can take a moment to start answering.
-          for i in $(seq 1 12); do
-            curl -sS -m 30 https://lumnia-api-lkfg.onrender.com/v1/health | tee health.json || true
-            echo
+          # Retry for up to ~5 minutes: the push that triggered this also
+          # triggers a Render rebuild, which now includes the web build.
+          for i in $(seq 1 20); do
+            curl -sS -m 30 https://lumnia-api-lkfg.onrender.com/v1/health -o health.json || true
             if python3 -c "import json;d=json.load(open('health.json'));assert d.get('ok') is True" 2>/dev/null; then
               echo "api ok: $(cat health.json)"; exit 0
             fi
             echo "attempt $i: not healthy yet, waiting 15s"; sleep 15
           done
           echo "API never became healthy"; cat health.json; exit 1
+      - name: Web client served from the same origin
+        run: |
+          code=$(curl -sS -o page.html -w "%{http_code}" -L https://lumnia-api-lkfg.onrender.com/)
+          echo "site status: $code"
+          grep -o "<title>[^<]*</title>" page.html || true
+          test "$code" = "200"
+          grep -qi "lumnia" page.html

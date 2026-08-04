@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .bootstrap import bootstrap
@@ -42,18 +45,6 @@ app.include_router(reports.router, prefix="/v1")
 app.include_router(ingest.router, prefix="/v1")
 
 
-@app.get("/", include_in_schema=False)
-def root():
-    """The API has no pages — point a stray visitor somewhere useful."""
-    return {
-        "service": "lumnia-api",
-        "version": VERSION,
-        "site": os.getenv("LUMNIA_SITE", "https://jessemutamba.github.io/LumniaV3/"),
-        "health": "/v1/health",
-        "docs": "/docs",
-    }
-
-
 @app.get("/v1/health", tags=["meta"])
 def health():
     return {
@@ -64,3 +55,23 @@ def health():
         "reports": len(store.list_reports()),
         "publishing_enabled": bool(os.getenv("LUMNIA_ADMIN_TOKEN")),
     }
+
+
+# One service, one URL: when the image carries the built web client, serve
+# it at the root — same origin as /v1, so the browser needs no CORS at all.
+# Without it (local dev, tests), the root stays a signpost. A mount at "/"
+# matches everything after it, so it must be the LAST route registered.
+STATIC = Path(os.getenv("LUMNIA_STATIC", "/nonexistent"))
+if STATIC.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC, html=True), name="web")
+else:
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        """The API has no pages here — point a stray visitor somewhere useful."""
+        return {
+            "service": "lumnia-api",
+            "version": VERSION,
+            "health": "/v1/health",
+            "docs": "/docs",
+        }
