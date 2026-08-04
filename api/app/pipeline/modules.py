@@ -19,6 +19,7 @@ from typing import Callable
 
 from ..schema import (
     BarPair,
+    Column,
     Flag,
     Heading,
     Kpi,
@@ -383,6 +384,122 @@ def _aligned(wbs: list[Workbook], mdef):
 
 
 # --------------------------------------------------------------------------
+# trajectory — the plan's own multi-year summary, read rather than retyped
+# --------------------------------------------------------------------------
+
+def _year_columns(sheet, declared: int | None) -> dict[int, int]:
+    """{year: column} from the sheet's own header row. A row carrying three
+    or more four-digit years is that header; the client may name the row
+    outright when a sheet is stranger than that."""
+    rows = [declared] if declared else range(1, min(sheet.rows, 40) + 1)
+    for r in rows:
+        if r is None or r > sheet.rows:
+            continue
+        found = {}
+        for ci, v in enumerate(sheet.grid[r - 1] or []):
+            if _is_num(v) and float(v).is_integer() and 2000 <= int(v) <= 2100:
+                found[int(v)] = ci + 1
+        if len(found) >= 3:
+            return found
+    return {}
+
+
+def _run_trajectory(wbs: list[Workbook], tables, ctx, extras) -> list:
+    """The plan as the client wrote it: revenue, costs and the balance they
+    themselves projected, each figure pointing at the cell it came from.
+
+    A trajectory retyped into a slide is a trajectory nobody can check —
+    and the numbers most worth checking are the ones furthest out."""
+    if not ctx or not getattr(ctx, "timelines", None):
+        return []
+    blocks: list = []
+    for tname, tdef in ctx.timelines.items():
+        target = None
+        for wb in wbs:
+            for name, sheet in wb.sheets.items():
+                if _norm(name) == _norm(tdef.sheet):
+                    target = (wb, name, sheet)
+                    break
+        if not target:
+            continue
+        wb, sname, sheet = target
+        years = _year_columns(sheet, tdef.years_row)
+        if not years:
+            continue
+        ordered = sorted(years)
+        found: dict[str, dict[int, tuple[int, float]]] = {}
+        for display, label in tdef.rows.items():
+            for r in range(1, sheet.rows + 1):
+                row = sheet.grid[r - 1] or []
+                labels = [_norm(c) for c in row[:4] if isinstance(c, str)]
+                if not any(_norm(label) == c for c in labels):
+                    continue
+                vals = {
+                    y: (col, float(row[col - 1]))
+                    for y, col in years.items()
+                    if col <= len(row) and _is_num(row[col - 1])
+                }
+                if vals:
+                    found[display] = vals
+                    found.setdefault("_rows", {})[display] = r  # type: ignore
+                break
+        rownos = found.pop("_rows", {})  # type: ignore
+        if not found:
+            continue
+        columns = [Column(key="item", label=Text(fr="Poste", en="Line item"),
+                          align="left")]
+        for y in ordered:
+            columns.append(Column(key=f"y{y}", label=Text(fr=str(y)),
+                                  align="right", money=tdef.unit in ("USD", "CDF")))
+        out_rows = []
+        for display, vals in found.items():
+            row: dict = {"item": display}
+            for y in ordered:
+                if y in vals:
+                    col, v = vals[y]
+                    row[f"y{y}"] = Value(
+                        n=v, unit=tdef.unit,
+                        src=Src(file=wb.source.idx, sheet=sname,
+                                cells=a1(rownos[display], col)),
+                    )
+            out_rows.append(row)
+        blocks.append(Heading(
+            level=3,
+            label=Text(fr="Plan", en="Plan"),
+            text=Text(fr=tname, en=tname),
+            dek=tdef.definition or Text(
+                fr=f"Trajectoire telle que le client l'a écrite dans « {sname} ».",
+                en=f"The trajectory as the client wrote it in “{sname}”.",
+            ),
+        ))
+        blocks.append(Table(columns=columns, rows=out_rows))
+
+        drawn = [d for d in tdef.chart if d in found][:2]
+        if len(drawn) == 2:
+            blocks.append(BarPair(
+                title=Text(fr=f"{tname} · {drawn[0]} contre {drawn[1]}",
+                           en=f"{tname} · {drawn[0]} vs {drawn[1]}"),
+                sub=Text(fr="par exercice", en="by year"),
+                x=[str(y) for y in ordered],
+                series=[
+                    Series(
+                        key=f"s{i}",
+                        label=Text(fr=d),
+                        values=[
+                            Value(n=found[d][y][1], unit=tdef.unit,
+                                  src=Src(file=wb.source.idx, sheet=sname,
+                                          cells=a1(rownos[d], found[d][y][0])))
+                            for y in ordered if y in found[d]
+                        ],
+                    )
+                    for i, d in enumerate(drawn)
+                ],
+                fmt="k",
+            ))
+    return blocks
+
+
+# --------------------------------------------------------------------------
 # efficiency — the rate a plan implied, against the rate reality produced
 # --------------------------------------------------------------------------
 
@@ -422,7 +539,7 @@ def _run_efficiency(wbs: list[Workbook], tables, ctx, extras) -> list:
                             src=an["a_src"]),
                 sub=Text(
                     fr=(f"contre {planned:,.1f} prévu — {gap:+.0f} % sur {n} mois"
-                        .replace(",", " ")),
+                        .replace(",", " ").replace(".", ",")),
                     en=(f"against {planned:,.1f} planned — {gap:+.0f} % over {n} months"),
                 ),
                 tone="bad" if worse and abs(gap) > 15 else
@@ -897,6 +1014,13 @@ MODULES: dict[str, Module] = {
             description_fr="Écritures à même date et même montant dans deux journaux : le même argent compté deux fois.",
             description_en="Entries with the same date and amount in two journals: the same money counted twice.",
             run=_run_reconciliation,
+        ),
+        Module(
+            name="trajectory",
+            version="1.0",
+            description_fr="La trajectoire pluriannuelle telle que le client l'a écrite — revenus, charges, solde — lue dans sa propre feuille de synthèse, chaque chiffre pointant sa cellule.",
+            description_en="The multi-year trajectory as the client wrote it — revenue, costs, balance — read from their own summary sheet, every figure pointing at its cell.",
+            run=_run_trajectory,
         ),
         Module(
             name="efficiency",

@@ -16,8 +16,11 @@ export default function Dashboard({ rep, locale }) {
   const bars = rep.blocks.filter((b) => b.type === 'barPair')
   const flags = rep.blocks.filter((b) => b.type === 'flag')
   const rails = rep.blocks.filter((b) => b.type === 'rail')
+  // The narration section is whatever the author labelled it — the machine
+  // writes « Narration », a hand-written report may say « Lecture ».
+  const NARR = ['narration', 'lecture', 'reading']
   const nIdx = rep.blocks.findIndex(
-    (b) => b.type === 'heading' && b.label?.fr === 'Narration'
+    (b) => b.type === 'heading' && NARR.includes((b.label?.fr || '').toLowerCase())
   )
   const narration = nIdx >= 0 && rep.blocks[nIdx + 1]?.type === 'prose'
     ? rep.blocks[nIdx + 1]
