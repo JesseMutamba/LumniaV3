@@ -3,11 +3,26 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from pydantic import ValidationError
 
 from .. import store
-from ..auth import check_share_key, new_share_key, require_author
+from ..auth import (
+    check_share_key,
+    fingerprint,
+    new_share_key,
+    rate_limit,
+    require_author,
+)
 from ..pipeline.checks import check_provenance
 from ..schema import (
     Context,
@@ -17,6 +32,7 @@ from ..schema import (
     OrgIn,
     Portal,
     PortalReport,
+    ReadStats,
     Report,
     ReportStub,
     StudioOrg,
@@ -61,15 +77,23 @@ def get_org_reports(org_id: str):
 # portal — one link per client, every published report behind it
 # --------------------------------------------------------------------------
 
-@router.get("/portal/{org_id}", response_model=Portal, tags=["portal"])
-def get_portal(org_id: str, k: str | None = Query(default=None)):
+@router.get(
+    "/portal/{org_id}",
+    response_model=Portal,
+    tags=["portal"],
+    dependencies=[Depends(rate_limit)],
+)
+def get_portal(org_id: str, request: Request, k: str | None = Query(default=None)):
     """Public read with the client's portal key. Lists published reports only
     — drafts and retracted reports are the author's business. Each entry
     carries its own share key so the reader can open it; that is the grant
     the portal key stands for."""
     org = store.get_org(org_id)
     actual = store.get_org_key(org_id) if org else None
-    if not org or not check_share_key(k, actual):
+    ok = bool(org) and check_share_key(k, actual)
+    if org:
+        store.log_read("portal", org_id, ok, fingerprint(request))
+    if not ok:
         raise HTTPException(404, "Unknown client or bad key.")
     reports: list[PortalReport] = []
     for stub in store.list_reports(org_id):
@@ -99,12 +123,20 @@ def _readable(rep: Report, key: str | None) -> Report:
     return rep.model_copy(update={"share_key": None})
 
 
-@router.get("/reports/{report_id}", response_model=Report, tags=["reports"])
-def get_report(report_id: str, k: str | None = Query(default=None)):
-    """Public read. Requires the share key that came with the link."""
+@router.get(
+    "/reports/{report_id}",
+    response_model=Report,
+    tags=["reports"],
+    dependencies=[Depends(rate_limit)],
+)
+def get_report(report_id: str, request: Request, k: str | None = Query(default=None)):
+    """Public read. Requires the share key that came with the link. Every
+    attempt on a real report is logged — accepted or refused."""
     rep = store.get_report(report_id)
     if not rep:
         raise HTTPException(404, f"Unknown report: {report_id}")
+    ok = rep.status != "retracted" and check_share_key(k, rep.share_key)
+    store.log_read("report", report_id, ok, fingerprint(request))
     return _readable(rep, k)
 
 
@@ -276,6 +308,32 @@ def get_org_context_versions(org_id: str):
     if not store.get_org(org_id):
         raise HTTPException(404, f"Unknown org: {org_id}")
     return store.list_context_versions(org_id)
+
+
+@router.get(
+    "/studio/reports/{report_id}/reads",
+    response_model=ReadStats,
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_report_reads(report_id: str):
+    """Who opened this report: reads, distinct readers, last read, refusals."""
+    if not store.get_report(report_id):
+        raise HTTPException(404, f"Unknown report: {report_id}")
+    return ReadStats(**store.read_stats("report", report_id))
+
+
+@router.get(
+    "/studio/orgs/{org_id}/reads",
+    response_model=ReadStats,
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_portal_reads(org_id: str):
+    """Same, for the client's portal."""
+    if not store.get_org(org_id):
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    return ReadStats(**store.read_stats("portal", org_id))
 
 
 @router.post(

@@ -12,11 +12,14 @@ and a handful of named readers, and it is small enough to audit in a minute.
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import os
 import secrets
+import time
+from collections import defaultdict, deque
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
 TOKEN_ENV = "LUMNIA_ADMIN_TOKEN"
 
@@ -52,3 +55,43 @@ def check_share_key(supplied: str | None, actual: str | None) -> bool:
     if not supplied or not actual:
         return False
     return hmac.compare_digest(supplied, actual)
+
+
+# --------------------------------------------------------------------------
+# read-path assurance: a coarse reader fingerprint for the audit log, and a
+# per-IP rate limit so a script guessing keys makes noise and then stops.
+# --------------------------------------------------------------------------
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def fingerprint(request: Request) -> str:
+    """Hashed IP + user agent, truncated. Enough to say 'three distinct
+    readers opened this' — deliberately not enough to say who they are."""
+    ua = request.headers.get("user-agent", "")
+    return hashlib.sha256(f"{_client_ip(request)}|{ua}".encode()).hexdigest()[:12]
+
+
+_WINDOW_S = 60.0
+_hits: dict[str, deque] = defaultdict(deque)
+
+
+def rate_limit(request: Request) -> None:
+    """Sliding window per IP on the public read paths. Share keys are
+    unguessable by size; this makes sure they are unguessable by patience
+    too. LUMNIA_RATE_LIMIT reads per minute, default 120."""
+    limit = int(os.getenv("LUMNIA_RATE_LIMIT", "120"))
+    now = time.monotonic()
+    q = _hits[_client_ip(request)]
+    while q and now - q[0] > _WINDOW_S:
+        q.popleft()
+    if len(q) >= limit:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many requests. Try again in a minute.",
+        )
+    q.append(now)

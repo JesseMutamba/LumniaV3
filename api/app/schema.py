@@ -280,6 +280,17 @@ class ContextVersion(BaseModel):
     updated_at: datetime
 
 
+class ReadStats(BaseModel):
+    """The audit answer: how many reads, how many distinct readers, when the
+    last one was, and how many attempts were refused."""
+
+    model_config = ConfigDict(extra="forbid")
+    reads: int
+    readers: int
+    last_read: datetime | None = None
+    refused: int
+
+
 class StudioOrg(Org):
     """Org plus its portal key — appears only in author-authenticated
     responses, never on a public endpoint."""

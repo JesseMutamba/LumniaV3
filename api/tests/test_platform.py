@@ -357,3 +357,42 @@ def test_ingest_applies_the_context(client, auth):
     assert "TOTAL" not in labels           # derived row excluded
     tonnes = table["rows"][0]["c3"]
     assert tonnes["unit"] == "t"           # unit override from context
+
+
+# ------------------------------------------------------------ assurance ---
+
+def test_reads_are_audited(client, auth, org):
+    key = client.post(f"/v1/orgs/{org}/reports", json=doc("r-aud"), headers=auth).json()["share_key"]
+    client.get(f"/v1/reports/r-aud?k={key}")
+    client.get(f"/v1/reports/r-aud?k={key}")
+    client.get("/v1/reports/r-aud?k=wrong")
+    s = client.get("/v1/studio/reports/r-aud/reads", headers=auth).json()
+    assert s["reads"] == 2 and s["refused"] == 1
+    assert s["readers"] == 1  # same client fingerprint
+    assert s["last_read"] is not None
+
+
+def test_portal_reads_are_audited(client, auth, org):
+    pkey = _portal_key(client, auth, org)
+    before = client.get(f"/v1/studio/orgs/{org}/reads", headers=auth).json()
+    client.get(f"/v1/portal/{org}?k={pkey}")
+    client.get(f"/v1/portal/{org}?k=wrong")
+    after = client.get(f"/v1/studio/orgs/{org}/reads", headers=auth).json()
+    assert after["reads"] == before["reads"] + 1
+    assert after["refused"] == before["refused"] + 1
+
+
+def test_read_stats_require_the_token(client, org):
+    assert client.get("/v1/studio/reports/r-aud/reads").status_code == 401
+    assert client.get(f"/v1/studio/orgs/{org}/reads").status_code == 401
+
+
+def test_public_reads_are_rate_limited(client, auth, org, monkeypatch):
+    from app import auth as auth_mod
+    key = client.post(f"/v1/orgs/{org}/reports", json=doc("r-lim"), headers=auth).json()["share_key"]
+    monkeypatch.setenv("LUMNIA_RATE_LIMIT", "3")
+    auth_mod._hits.clear()
+    for _ in range(3):
+        assert client.get(f"/v1/reports/r-lim?k={key}").status_code == 200
+    assert client.get(f"/v1/reports/r-lim?k={key}").status_code == 429
+    auth_mod._hits.clear()

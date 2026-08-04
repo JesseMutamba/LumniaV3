@@ -112,5 +112,8 @@ ahead of the client.
 - **Share keys are bearer tokens in a URL.** Unguessable, but a forwarded link
   is a granted read. Right trade for named stakeholders, wrong one for an
   enterprise buyer.
-- No read audit log, no rate limiting, no accounts.
+- Every public read attempt — accepted or refused — lands in an audit log
+  (`/v1/studio/.../reads` answers who opened what, when), and the read paths
+  are rate limited per IP. Still no accounts: reader identity is a coarse
+  fingerprint, not a login, and that is the next assurance gate.
 - `barPair` takes exactly two series.

@@ -305,6 +305,10 @@ td.pos{color:var(--gold)}
   padding:0 20px;font-family:var(--sans);font-weight:500;font-size:14px;color:var(--ground)}
 .share button:hover{background:var(--gold-hover)}
 .fine{margin-top:12px;font-size:14px}
+.reads{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:12px;
+  font-family:var(--mono);font-size:11px;line-height:1.6;letter-spacing:.06em;
+  color:var(--mut-6)}
+.reads .link{font-size:12px}
 .org-list{border:1px solid var(--line-soft);border-radius:3px;background:var(--well);
   margin-bottom:16px}
 .org-row{display:grid;grid-template-columns:150px 1fr auto auto auto;gap:16px;align-items:center;

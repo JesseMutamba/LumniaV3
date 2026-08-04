@@ -39,6 +39,14 @@ CREATE TABLE IF NOT EXISTS contexts (
   doc        TEXT NOT NULL,    -- json ContextIn
   PRIMARY KEY (org, version)
 );
+CREATE TABLE IF NOT EXISTS reads (
+  ts     TEXT NOT NULL,
+  kind   TEXT NOT NULL,        -- 'report' | 'portal'
+  target TEXT NOT NULL,        -- report id or org id
+  ok     INTEGER NOT NULL,     -- 1 = key accepted, 0 = refused
+  client TEXT                  -- coarse fingerprint, not an identity
+);
+CREATE INDEX IF NOT EXISTS reads_target ON reads(kind, target, ts);
 """
 
 
@@ -142,6 +150,41 @@ def get_context(org_id: str) -> Context | None:
     return Context(
         **json.loads(row["doc"]), version=row["version"], updated_at=row["created_at"]
     )
+
+
+# --------------------------------------------------------------------------
+# reads — the audit trail. Every public read attempt lands here, accepted or
+# refused, so "who opened this and when" has an answer and a burst of
+# refused keys is visible instead of silent.
+# --------------------------------------------------------------------------
+
+def log_read(kind: str, target: str, ok: bool, client: str | None) -> None:
+    from datetime import datetime, timezone
+
+    with connect() as con:
+        con.execute(
+            "INSERT INTO reads (ts, kind, target, ok, client) VALUES (?,?,?,?,?)",
+            (datetime.now(timezone.utc).isoformat(), kind, target, int(ok), client),
+        )
+
+
+def read_stats(kind: str, target: str) -> dict:
+    with connect() as con:
+        row = con.execute(
+            "SELECT "
+            "  SUM(ok) AS reads, "
+            "  COUNT(DISTINCT CASE WHEN ok = 1 THEN client END) AS readers, "
+            "  MAX(CASE WHEN ok = 1 THEN ts END) AS last_read, "
+            "  SUM(1 - ok) AS refused "
+            "FROM reads WHERE kind = ? AND target = ?",
+            (kind, target),
+        ).fetchone()
+    return {
+        "reads": row["reads"] or 0,
+        "readers": row["readers"] or 0,
+        "last_read": row["last_read"],
+        "refused": row["refused"] or 0,
+    }
 
 
 def list_context_versions(org_id: str) -> list[ContextVersion]:

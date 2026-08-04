@@ -23,6 +23,12 @@ export default function Studio({ locale, onPublished }) {
   const [ctxText, setCtxText] = useState('')
   const [ctxMeta, setCtxMeta] = useState(null)
   const [ctxErr, setCtxErr] = useState(null)
+  const [reads, setReads] = useState(null)
+
+  useEffect(() => {
+    setReads(null)
+    if (result) api.reportReads(result.id).then(setReads).catch(() => {})
+  }, [result])
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
   const L = locale === 'fr'
@@ -290,6 +296,23 @@ export default function Studio({ locale, onPublished }) {
               ? "Quiconque a ce lien peut lire ce rapport et rien d'autre. Aucun compte requis."
               : 'Anyone with this link can read this one report and nothing else. No account required.'}
           </p>
+          {reads && (
+            <div className="reads">
+              {reads.reads} {L ? 'lecture(s)' : 'read(s)'} · {reads.readers}{' '}
+              {L ? 'lecteur(s)' : 'reader(s)'}
+              {reads.last_read &&
+                ` · ${L ? 'dernière le' : 'last on'} ${String(reads.last_read).slice(0, 10)}`}
+              {reads.refused > 0 &&
+                ` · ${reads.refused} ${L ? 'tentative(s) refusée(s)' : 'refused attempt(s)'}`}
+              {'  '}
+              <button
+                className="link"
+                onClick={() => api.reportReads(result.id).then(setReads).catch(() => {})}
+              >
+                {L ? 'actualiser' : 'refresh'}
+              </button>
+            </div>
+          )}
           <div className="row-actions">
             <button className="link" onClick={rotate}>
               {L ? 'régénérer la clé' : 'rotate key'}
