@@ -38,6 +38,23 @@ def org(client):
     return "acme"
 
 
+def xlsx(sheets: dict) -> bytes:
+    """Build a workbook in memory: {sheet: [[row], ...]}."""
+    import io
+
+    from openpyxl import Workbook as XlsxWorkbook
+
+    wb = XlsxWorkbook()
+    wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for row in rows:
+            ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def doc(rid="r-1", org="acme", **kw):
     base = {
         "id": rid, "org": org,

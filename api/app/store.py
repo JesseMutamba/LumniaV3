@@ -48,6 +48,14 @@ CREATE TABLE IF NOT EXISTS ingestions (
   summary  TEXT NOT NULL,      -- json snapshot of detected tables
   PRIMARY KEY (org, filename, seq)
 );
+CREATE TABLE IF NOT EXISTS tiles (
+  org        TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  question   TEXT NOT NULL,
+  label      TEXT NOT NULL,     -- the block label this tile bound to at confirm
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org, id)
+);
 CREATE TABLE IF NOT EXISTS files (
   org      TEXT NOT NULL,
   filename TEXT NOT NULL,
@@ -237,6 +245,41 @@ def list_ingestions(org_id: str) -> list[dict]:
 # is a query, not an archaeology dig.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# tiles — a question the author asked once and wants answered from now on
+# --------------------------------------------------------------------------
+
+def put_tile(org_id: str, tile_id: str, question: str, label: str) -> dict:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        con.execute(
+            "INSERT INTO tiles (org, id, question, label, created_at) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(org, id) DO UPDATE SET "
+            "  question=excluded.question, label=excluded.label",
+            (org_id, tile_id, question, label, now),
+        )
+    return {"id": tile_id, "question": question, "label": label, "created_at": now}
+
+
+def list_tiles(org_id: str) -> list[dict]:
+    with connect() as con:
+        rows = con.execute(
+            "SELECT id, question, label, created_at FROM tiles "
+            "WHERE org = ? ORDER BY created_at",
+            (org_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_tile(org_id: str, tile_id: str) -> bool:
+    with connect() as con:
+        cur = con.execute("DELETE FROM tiles WHERE org = ? AND id = ?",
+                          (org_id, tile_id))
+    return cur.rowcount > 0
+
+
 def put_file(org_id: str, filename: str, seq: int, sha256: str | None,
              body: bytes) -> None:
     """Keep the workbook so a question can be answered against the client's
@@ -256,22 +299,29 @@ def put_file(org_id: str, filename: str, seq: int, sha256: str | None,
 
 
 def latest_files(org_id: str) -> list[dict]:
-    """The newest kept copy of every workbook this client has sent, in the
-    order they were first ingested — file 0 stays file 0 across questions."""
+    """The newest kept copy of every workbook this client has sent, ordered
+    by when each file was *first* seen.
+
+    The ordering matters more than it looks: a value's provenance records
+    which file it came from as an index into this list, so the order must
+    not shift when one workbook is re-uploaded on its own. Ordering by the
+    newest copy's timestamp would do exactly that, and every stored figure
+    would start naming the wrong workbook."""
     with connect() as con:
         rows = con.execute(
             "SELECT f.filename, f.seq, f.ts, f.sha256, f.body FROM files f "
-            "JOIN (SELECT filename, MAX(seq) AS seq FROM files WHERE org = ? "
-            "      GROUP BY filename) m "
+            "JOIN (SELECT filename, MAX(seq) AS seq, MIN(ts) AS first_ts "
+            "      FROM files WHERE org = ? GROUP BY filename) m "
             "  ON m.filename = f.filename AND m.seq = f.seq "
-            "WHERE f.org = ? ORDER BY f.ts, f.filename",
+            "WHERE f.org = ? ORDER BY m.first_ts, f.filename",
             (org_id, org_id),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
 def latest_file_names(org_id: str) -> list[str]:
-    """Which books a question would read — without loading any of them."""
+    """Which books a question would read, in the order `latest_files` loads
+    them — without loading any of them."""
     with connect() as con:
         rows = con.execute(
             "SELECT filename, MIN(ts) AS first_ts FROM files WHERE org = ? "
