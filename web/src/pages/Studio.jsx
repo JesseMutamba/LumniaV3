@@ -31,9 +31,14 @@ export default function Studio({ locale, onPublished }) {
   }, [result])
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
+  const [dash, setDash] = useState([])
+
   const L = locale === 'fr'
   const refresh = () => {
-    if (api.hasToken()) api.listStudioOrgs().then(setOrgs).catch(() => {})
+    if (api.hasToken()) {
+      api.listStudioOrgs().then(setOrgs).catch(() => {})
+      api.getDashboard().then(setDash).catch(() => {})
+    }
   }
   useEffect(() => { refresh() }, [token])
 
@@ -183,6 +188,53 @@ export default function Studio({ locale, onPublished }) {
           {L ? 'oublier le jeton' : 'forget token'}
         </button>
       </div>
+
+      {/* --------------------------------------------------------- overview */}
+      {dash.length > 0 && (
+        <section className="panel">
+          <div className="panel-h">
+            {L ? "00 · Vue d'ensemble" : '00 · Overview'}
+          </div>
+          <div className="dash">
+            {dash.map((d) => (
+              <div key={d.id} className="dash-row">
+                <span className="dash-name">
+                  {d.name} <span className="mono muted">{d.id}</span>
+                </span>
+                <span className="dash-cell">
+                  {d.published} {L ? 'publié(s)' : 'published'}
+                  {d.unpublished > 0 &&
+                    ` · ${d.unpublished} ${L ? 'brouillon(s)' : 'draft(s)'}`}
+                </span>
+                <span className="dash-cell">
+                  {d.reads} {L ? 'lecture(s)' : 'read(s)'}
+                  {d.last_read && ` · ${String(d.last_read).slice(0, 10)}`}
+                  {d.refused > 0 && (
+                    <span className="dash-bad">
+                      {' '}· {d.refused} {L ? 'refusée(s)' : 'refused'}
+                    </span>
+                  )}
+                </span>
+                <span className="dash-cell">
+                  {d.last_ingest
+                    ? `${L ? 'ingéré le' : 'ingested'} ${String(d.last_ingest).slice(0, 10)} · ${d.files_tracked} ${L ? 'fichier(s)' : 'file(s)'}`
+                    : L ? 'jamais ingéré' : 'never ingested'}
+                </span>
+                <span className="dash-cell">
+                  {d.context_version
+                    ? `${L ? 'contexte' : 'context'} v${d.context_version}${d.modules.length ? ` · ${d.modules.join(' · ')}` : ''}`
+                    : L ? 'sans contexte' : 'no context'}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="fine">
+            {L
+              ? 'Une ligne par client : rapports sortis, lectures entrées, dernière ingestion, contexte appliqué.'
+              : 'One row per client: reports out, reads in, last ingest, context applied.'}
+          </p>
+        </section>
+      )}
 
       {/* ---------------------------------------------------------- analyse */}
       <section className="panel">

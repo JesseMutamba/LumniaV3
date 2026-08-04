@@ -639,3 +639,30 @@ def test_narrate_llm_gate_is_closed_without_key(monkeypatch):
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert modules._llm_polish([("Un fait : 42.", "A fact: 42.")]) is None
+
+
+# --------------------------------------------------------------------------
+# dashboard — the practice at a glance
+# --------------------------------------------------------------------------
+
+def test_dashboard_aggregates_per_client(client, auth):
+    client.post("/v1/orgs", json={"id": "dsh", "name": "Dash", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/dsh/context",
+               json={"modules": ["movements", "narrate"]}, headers=auth)
+    r = client.post("/v1/orgs/dsh/reports", json=doc("r-dsh", org="dsh"),
+                    headers=auth)
+    assert r.status_code == 201
+    _ingest(client, auth, BUDGET_SHEET, org="dsh")
+    client.get("/v1/portal/dsh?k=wrong-key")  # one refused read
+
+    rows = client.get("/v1/studio/dashboard", headers=auth).json()
+    row = next(x for x in rows if x["id"] == "dsh")
+    assert row["published"] == 1 and row["unpublished"] == 0
+    assert row["context_version"] == 1
+    assert row["modules"] == ["movements", "narrate"]
+    assert row["files_tracked"] == 1 and row["last_ingest"]
+    assert row["refused"] >= 1
+
+    # the dashboard is the author's view — no token, no rows
+    assert client.get("/v1/studio/dashboard").status_code == 401

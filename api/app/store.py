@@ -242,6 +242,58 @@ def read_stats(kind: str, target: str) -> dict:
     }
 
 
+def dashboard() -> list[dict]:
+    """One row per client: the practice at a glance. Counts only — the
+    detail lives behind the endpoints each panel already has."""
+    with connect() as con:
+        orgs = con.execute(
+            "SELECT o.id, o.name, o.sub, "
+            "  (SELECT COUNT(*) FROM reports r WHERE r.org = o.id "
+            "     AND r.status = 'published') AS published, "
+            "  (SELECT COUNT(*) FROM reports r WHERE r.org = o.id "
+            "     AND r.status != 'published') AS unpublished, "
+            "  (SELECT MAX(version) FROM contexts c WHERE c.org = o.id) "
+            "     AS context_version, "
+            "  (SELECT MAX(ts) FROM ingestions i WHERE i.org = o.id) "
+            "     AS last_ingest, "
+            "  (SELECT COUNT(DISTINCT filename) FROM ingestions i "
+            "     WHERE i.org = o.id) AS files_tracked "
+            "FROM orgs o ORDER BY o.name"
+        ).fetchall()
+        out = []
+        for o in orgs:
+            reads = con.execute(
+                "SELECT SUM(ok) AS reads, SUM(1 - ok) AS refused, "
+                "  MAX(CASE WHEN ok = 1 THEN ts END) AS last_read "
+                "FROM reads WHERE (kind = 'portal' AND target = ?) "
+                "  OR (kind = 'report' AND target IN "
+                "      (SELECT id FROM reports WHERE org = ?))",
+                (o["id"], o["id"]),
+            ).fetchone()
+            ctx_doc = con.execute(
+                "SELECT doc FROM contexts WHERE org = ? "
+                "ORDER BY version DESC LIMIT 1",
+                (o["id"],),
+            ).fetchone()
+            modules = json.loads(ctx_doc["doc"]).get("modules", []) if ctx_doc else []
+            out.append(
+                {
+                    "id": o["id"],
+                    "name": o["name"],
+                    "published": o["published"],
+                    "unpublished": o["unpublished"],
+                    "context_version": o["context_version"],
+                    "modules": modules,
+                    "last_ingest": o["last_ingest"],
+                    "files_tracked": o["files_tracked"],
+                    "reads": reads["reads"] or 0,
+                    "refused": reads["refused"] or 0,
+                    "last_read": reads["last_read"],
+                }
+            )
+    return out
+
+
 def list_context_versions(org_id: str) -> list[ContextVersion]:
     with connect() as con:
         rows = con.execute(

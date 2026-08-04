@@ -13,7 +13,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from .. import store
 from ..auth import (
@@ -315,6 +315,32 @@ def get_org_context_versions(org_id: str):
     if not store.get_org(org_id):
         raise HTTPException(404, f"Unknown org: {org_id}")
     return store.list_context_versions(org_id)
+
+
+class DashboardRow(BaseModel):
+    id: str
+    name: str
+    published: int
+    unpublished: int
+    context_version: int | None = None
+    modules: list[str] = []
+    last_ingest: str | None = None
+    files_tracked: int = 0
+    reads: int = 0
+    refused: int = 0
+    last_read: str | None = None
+
+
+@router.get(
+    "/studio/dashboard",
+    response_model=list[DashboardRow],
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_dashboard():
+    """The practice at a glance: one row per client — reports out, reads in,
+    refusals, last ingest, context version, modules enabled."""
+    return [DashboardRow(**r) for r in store.dashboard()]
 
 
 @router.get(
