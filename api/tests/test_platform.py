@@ -754,6 +754,60 @@ def test_timeline_keeps_each_runs_facts(client, auth):
 
 
 # --------------------------------------------------------------------------
+# registry + lineage — every headline number explains itself
+# --------------------------------------------------------------------------
+
+def test_registry_definition_travels_into_the_report(client, auth):
+    client.post("/v1/orgs", json={"id": "lin", "name": "Lin", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/lin/context", json={
+        "modules": ["budget-vs-actual"],
+        "metrics": {
+            "OPEX": {
+                "budget": {"sheet": "opex", "label": "TOTAL DEPENSES"},
+                "actual": {"sheet": "reel", "label": "TOTAL SITE"},
+                "definition": {"fr": "Charges d'exploitation du site",
+                               "en": "Site operating expenses"},
+                "methodology": {"fr": "Budget phasé, ratio des totaux",
+                                "en": "Phased budget, ratio of totals"},
+                "owner": "DAF",
+            }
+        },
+    }, headers=auth)
+    budget_wb = {"opex": [
+        ["Poste", "Jan", "Fév", "Mar", "Avr"],
+        ["Salaires", 60, 70, 70, 60],
+        ["TOTAL DEPENSES OPEX", 100, 100, 100, 100],
+    ]}
+    actual_wb = {"reel": [
+        ["Opération", "Jan", "Fév", "Mar"],
+        ["Plantations", 10, 20, 10],
+        ["TOTAL SITE", 20, 50, 50],
+    ]}
+    body = _ingest_many(client, auth, [budget_wb, actual_wb], "lin").json()
+    kpi = next(b for b in body["draft"]["blocks"] if b["type"] == "kpiGrid"
+               and "OPEX" in b["items"][0]["label"]["fr"])["items"][0]
+
+    # the registry entry travels with the report — readers need no author access
+    assert kpi["metric"] == "OPEX"
+    assert kpi["definition"]["en"] == "Site operating expenses"
+    assert kpi["methodology"]["fr"] == "Budget phasé, ratio des totaux"
+
+    # ordered lineage: actuals summed, phased budget summed, ratio — with cells
+    steps = kpi["lineage"]
+    assert len(steps) == 3
+    assert steps[0]["n"] == 120 and steps[0]["cells"].startswith("reel!")
+    assert steps[1]["n"] == 300 and steps[1]["cells"].startswith("opex!")
+    assert steps[2]["n"] == kpi["value"]["n"]
+    # phased over the SAME months: budget cells span 3 columns, not 4
+    assert steps[1]["cells"].endswith("B3:D3")
+
+    # a draft carrying lineage still publishes — lineage is additive
+    r = client.post("/v1/orgs/lin/reports", json=body["draft"], headers=auth)
+    assert r.status_code == 201
+
+
+# --------------------------------------------------------------------------
 # hand authoring — the template shipped to authors must publish as-is
 # --------------------------------------------------------------------------
 

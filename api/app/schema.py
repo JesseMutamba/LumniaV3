@@ -91,12 +91,27 @@ class Prose(Block):
     text: Text
 
 
+class Step(BaseModel):
+    """One line of a calculation's lineage: what was done, where, and the
+    number it produced. Steps narrate the computation; they never replace
+    the value's own Src."""
+
+    model_config = ConfigDict(extra="forbid")
+    text: Text
+    cells: str | None = None  # "SHEET!A1:C3" — sheet-qualified, human-first
+    n: float | None = None
+
+
 class Kpi(BaseModel):
     model_config = ConfigDict(extra="forbid")
     label: Text
     value: Value
     sub: Text | None = None
     tone: Literal["neutral", "good", "warn", "bad"] = "neutral"
+    metric: str | None = None        # registry key in the client context
+    definition: Text | None = None   # baked in from the registry at draft time
+    methodology: Text | None = None  # readers hold no author access — it travels
+    lineage: list[Step] = []         # ordered computation, for the drill panel
 
 
 class KpiGrid(Block):
@@ -263,13 +278,18 @@ class SeriesDef(BaseModel):
 
 
 class MetricDef(BaseModel):
-    """A named budget-vs-actual comparison. Budget and actual may live in
-    different workbooks — provenance carries the file either way."""
+    """A registry entry: a named budget-vs-actual comparison plus what it
+    *means*. Budget and actual may live in different workbooks — provenance
+    carries the file either way. The context's append-only versioning gives
+    every definition change a visible history for free."""
 
     model_config = ConfigDict(extra="forbid")
     budget: SeriesDef
     actual: SeriesDef
     unit: Unit = "USD"
+    definition: Text | None = None   # plain-language: what this metric is
+    methodology: Text | None = None  # how it is computed, in one line
+    owner: str | None = None         # who answers for the definition
 
 
 class ContextIn(BaseModel):

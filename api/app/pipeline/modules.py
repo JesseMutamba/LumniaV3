@@ -29,6 +29,7 @@ from ..schema import (
     Series,
     SeriesDef,
     Src,
+    Step,
     Table,
     Text,
     Value,
@@ -137,6 +138,7 @@ def _run_execution(wbs: list[Workbook], tables, ctx, extras) -> list:
             continue
         pct = round(sum_a / sum_b * 100, 1)
         a_range = a1_range(first_r, a_col.index, last_r, a_col.index)
+        b_range = a1_range(first_r, b_col.index, last_r, b_col.index)
         blocks.append(
             KpiGrid(
                 items=[
@@ -151,6 +153,17 @@ def _run_execution(wbs: list[Workbook], tables, ctx, extras) -> list:
                             en=f"{sum_a:,.0f} of {sum_b:,.0f} — ratio of totals, never average of ratios".replace(",", " "),
                         ),
                         tone="bad" if pct > 110 else "warn" if pct < 60 else "neutral",
+                        lineage=[
+                            Step(text=Text(fr=f"Somme de la colonne « {a_col.label} »",
+                                           en=f"Sum of column “{a_col.label}”"),
+                                 cells=f"{t.sheet}!{a_range}", n=round(sum_a, 2)),
+                            Step(text=Text(fr=f"Somme de la colonne « {b_col.label} »",
+                                           en=f"Sum of column “{b_col.label}”"),
+                                 cells=f"{t.sheet}!{b_range}", n=round(sum_b, 2)),
+                            Step(text=Text(fr="Ratio des totaux — jamais moyenne des ratios",
+                                           en="Ratio of totals — never an average of ratios"),
+                                 n=pct),
+                        ],
                     )
                 ]
             )
@@ -351,7 +364,33 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
             continue
         pct = round(sum_a / sum_b * 100, 1)
         a_range = a1_range(arow, acells[0][0], arow, acells[n - 1][0])
+        b_range = a1_range(brow, bcells[0][0], brow, bcells[n - 1][0])
         fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
+        lineage = [
+            Step(
+                text=Text(
+                    fr=f"Somme des {n} mois réels de « {mdef.actual.label} » ({awb.source.filename})",
+                    en=f"Sum of the {n} actual months of “{mdef.actual.label}” ({awb.source.filename})",
+                ),
+                cells=f"{asheet}!{a_range}",
+                n=round(sum_a, 2),
+            ),
+            Step(
+                text=Text(
+                    fr=f"Somme du budget phasé sur les {n} mêmes mois de « {mdef.budget.label} » ({bwb.source.filename}) — jamais le rythme annuel",
+                    en=f"Sum of the phased budget over the same {n} months of “{mdef.budget.label}” ({bwb.source.filename}) — never the annual rate",
+                ),
+                cells=f"{bsheet}!{b_range}",
+                n=round(sum_b, 2),
+            ),
+            Step(
+                text=Text(
+                    fr="Ratio des totaux : somme des réels ÷ somme du budget phasé — jamais moyenne des ratios",
+                    en="Ratio of totals: sum of actuals ÷ sum of phased budget — never an average of ratios",
+                ),
+                n=pct,
+            ),
+        ]
         blocks.append(
             KpiGrid(
                 items=[
@@ -368,6 +407,10 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
                             en=f"{fmt(sum_a)} actual against {fmt(sum_b)} phased budget over {n} months — ratio of totals",
                         ),
                         tone="bad" if pct > 115 else "warn" if pct < 60 else "neutral",
+                        metric=mname,
+                        definition=mdef.definition,
+                        methodology=mdef.methodology,
+                        lineage=lineage,
                     )
                 ]
             )
@@ -511,6 +554,14 @@ def _run_coverage(wbs: list[Workbook], tables, ctx, extras) -> list:
                     en=f"of {checked} entries — {amounts} not routed to OPEX/CAPEX",
                 ),
                 tone="good" if missing == 0 else "warn",
+                lineage=[
+                    Step(text=Text(fr=f"Écritures avec un montant dans « {t.sheet} » (colonnes de solde exclues)",
+                                   en=f"Entries carrying an amount in “{t.sheet}” (balance columns excluded)"),
+                         n=checked),
+                    Step(text=Text(fr=f"Dont cellule « {code_col.label} » vide — non routées",
+                                   en=f"Of which the “{code_col.label}” cell is empty — unrouted"),
+                         cells=f"{t.sheet}!{code_range}", n=missing),
+                ],
             )
         )
     if not kpis:
