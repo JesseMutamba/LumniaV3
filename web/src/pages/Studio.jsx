@@ -39,6 +39,22 @@ export default function Studio({ locale, onPublished }) {
   const [qOrg, setQOrg] = useState('')
   const [qMode, setQMode] = useState('direct')
   const [answer, setAnswer] = useState(null)
+  const [tiles, setTiles] = useState(null)
+
+  const loadTiles = (org) => {
+    if (org) api.getTiles(org).then(setTiles).catch(() => setTiles(null))
+  }
+  useEffect(() => { loadTiles(qOrg) }, [qOrg])
+
+  async function pin(question) {
+    const ok = await run(() => api.addTile(qOrg, question))
+    if (ok) loadTiles(qOrg)
+  }
+
+  async function unpin(tileId) {
+    await run(() => api.removeTile(qOrg, tileId))
+    loadTiles(qOrg)
+  }
 
   async function askQuestion(e) {
     e?.preventDefault()
@@ -360,6 +376,38 @@ export default function Studio({ locale, onPublished }) {
           </button>
         </form>
 
+        {(tiles?.tiles?.length > 0 || tiles?.pending?.length > 0) && (
+          <div className="wall">
+            {tiles.tiles.map((t) => (
+              <div className="wall-t" key={t.id}>
+                {t.block ? (
+                  <Block b={t.block} locale={locale} sources={tiles.sources} />
+                ) : (
+                  <div className="note">
+                    {L ? 'sans réponse dans les analyses récentes' : 'unanswered by recent analyses'}
+                  </div>
+                )}
+                <div className="wall-f">
+                  <span>
+                    {t.as_of ? String(t.as_of).slice(0, 10) : '—'}
+                  </span>
+                  <button className="link" onClick={() => unpin(t.id)}>
+                    {L ? 'retirer' : 'unpin'}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {tiles.pending.map((p) => (
+              <div className="wall-t empty" key={p}>
+                <div className="wall-q">{p}</div>
+                <button className="link" onClick={() => pin(p)} disabled={busy}>
+                  {L ? 'générer cette tuile' : 'generate this tile'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {answer && (
           <div className="ans">
             {answer.plan && (
@@ -408,6 +456,11 @@ export default function Studio({ locale, onPublished }) {
             {answer.blocks.map((b, i) => (
               <Block key={i} b={b} locale={locale} sources={answer.sources} />
             ))}
+            {answer.blocks.length > 0 && (
+              <button className="link" onClick={() => pin(answer.question)}>
+                {L ? 'épingler cette question' : 'pin this question'}
+              </button>
+            )}
           </div>
         )}
       </section>

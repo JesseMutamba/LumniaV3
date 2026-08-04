@@ -347,6 +347,23 @@ td.pos{color:var(--gold)}
   color:var(--ink)}
 .ask-form .gold-btn{white-space:nowrap}
 .ask-form .lens{margin:0}
+.wall{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:16px;margin-top:22px}
+.wall-t{border:1px solid var(--line);border-radius:4px;background:var(--panel);
+  padding:4px 16px 12px;display:flex;flex-direction:column;justify-content:space-between}
+.wall-t .b{margin:0}
+.wall-t .kpi{border:0;background:none;padding:14px 0 4px}
+.wall-t .kpi .v{font-size:36px}
+.wall-t .flag{border:0;padding:14px 0 4px}
+.wall-t .flag p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  overflow:hidden}
+.wall-t .flag .b-t{font-size:19px;line-height:1.25}
+.wall-f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--mut-42);
+  border-top:1px solid var(--line-soft);padding-top:8px;margin-top:8px}
+.wall-t.empty{border-style:dashed;border-color:var(--line-soft);background:none;
+  gap:14px;padding:20px 16px}
+.wall-q{font-family:var(--sans);font-size:14px;line-height:1.5;color:var(--mut-6)}
 .ans{margin-top:22px}
 .ans .b{margin-bottom:20px}
 .ans-asof{font-family:var(--mono);font-size:10px;letter-spacing:.18em;

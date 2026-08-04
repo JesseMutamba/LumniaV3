@@ -931,6 +931,64 @@ def test_workbooks_are_kept_only_while_the_client_allows_it(client, auth):
     assert store.latest_file_names("ask") == []
 
 
+def test_catalog_answers_what_can_you_see(client, auth, asked):
+    a = _ask(client, auth, org=asked, question="Quelles données peux-tu voir ?").json()
+    table = a["blocks"][0]
+    assert table["type"] == "table"
+    files = {r["file"] for r in table["rows"]}
+    assert len(files) == 2 and all(f.endswith(".xlsx") for f in files)
+    assert all(r["seen"] for r in table["rows"])
+    prose = a["blocks"][1]["text"]["fr"]
+    assert "budget-vs-actual" in prose and "OPEX" in prose
+
+
+# --------------------------------------------------------------------------
+# tiles — a question asked once, answered from every ingest afterwards
+# --------------------------------------------------------------------------
+
+def test_tiles_pin_a_question_and_keep_answering_it(client, auth, asked):
+    empty = client.get(f"/v1/studio/orgs/{asked}/tiles", headers=auth).json()
+    assert empty["tiles"] == []
+    # the empty slots come from this client's own context, never a guess
+    assert any("OPEX" in q for q in empty["pending"])
+
+    r = client.post(f"/v1/studio/orgs/{asked}/tiles",
+                    json={"question": "Quelle est l'exécution OPEX ?"}, headers=auth)
+    assert r.status_code == 201
+    tile = r.json()
+    assert tile["label"] == "Exécution · OPEX"
+    assert tile["block"]["items"][0]["value"]["n"] == pytest.approx(40.0, abs=0.1)
+
+    wall = client.get(f"/v1/studio/orgs/{asked}/tiles", headers=auth).json()
+    assert len(wall["tiles"]) == 1 and wall["tiles"][0]["block"]
+    # a pinned question leaves the pending list
+    assert not any("OPEX" in q for q in wall["pending"])
+
+    # a fresh analysis refreshes the tile in place — same tile, newer figure
+    _ingest_many(client, auth, [ASK_BUDGET, {"reel": [
+        ["Opération", "Jan", "Fév", "Mar"],
+        ["Plantations", 10, 20, 10],
+        ["TOTAL SITE", 30, 60, 60],
+    ]}], asked)
+    after = client.get(f"/v1/studio/orgs/{asked}/tiles", headers=auth).json()
+    assert after["tiles"][0]["id"] == tile["id"]
+    assert after["tiles"][0]["block"]["items"][0]["value"]["n"] == pytest.approx(
+        150 / 300 * 100, abs=0.1
+    )
+
+    assert client.delete(f"/v1/studio/orgs/{asked}/tiles/{tile['id']}",
+                         headers=auth).status_code == 204
+    assert client.get(f"/v1/studio/orgs/{asked}/tiles", headers=auth).json()["tiles"] == []
+
+
+def test_a_tile_needs_something_that_already_answers_it(client, auth, asked):
+    r = client.post(f"/v1/studio/orgs/{asked}/tiles",
+                    json={"question": "Combien de tracteurs ?"}, headers=auth)
+    assert r.status_code == 422
+    assert client.get("/v1/studio/orgs/ghost/tiles", headers=auth).status_code == 404
+    assert client.get(f"/v1/studio/orgs/{asked}/tiles").status_code == 401
+
+
 # --------------------------------------------------------------------------
 # hand authoring — the template shipped to authors must publish as-is
 # --------------------------------------------------------------------------

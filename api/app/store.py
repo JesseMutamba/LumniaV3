@@ -48,6 +48,14 @@ CREATE TABLE IF NOT EXISTS ingestions (
   summary  TEXT NOT NULL,      -- json snapshot of detected tables
   PRIMARY KEY (org, filename, seq)
 );
+CREATE TABLE IF NOT EXISTS tiles (
+  org        TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  question   TEXT NOT NULL,
+  label      TEXT NOT NULL,     -- the block label this tile bound to at confirm
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (org, id)
+);
 CREATE TABLE IF NOT EXISTS files (
   org      TEXT NOT NULL,
   filename TEXT NOT NULL,
@@ -236,6 +244,41 @@ def list_ingestions(org_id: str) -> list[dict]:
 # facts behind, so "how did this number move across versions of the file"
 # is a query, not an archaeology dig.
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# tiles — a question the author asked once and wants answered from now on
+# --------------------------------------------------------------------------
+
+def put_tile(org_id: str, tile_id: str, question: str, label: str) -> dict:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        con.execute(
+            "INSERT INTO tiles (org, id, question, label, created_at) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(org, id) DO UPDATE SET "
+            "  question=excluded.question, label=excluded.label",
+            (org_id, tile_id, question, label, now),
+        )
+    return {"id": tile_id, "question": question, "label": label, "created_at": now}
+
+
+def list_tiles(org_id: str) -> list[dict]:
+    with connect() as con:
+        rows = con.execute(
+            "SELECT id, question, label, created_at FROM tiles "
+            "WHERE org = ? ORDER BY created_at",
+            (org_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_tile(org_id: str, tile_id: str) -> bool:
+    with connect() as con:
+        cur = con.execute("DELETE FROM tiles WHERE org = ? AND id = ?",
+                          (org_id, tile_id))
+    return cur.rowcount > 0
+
 
 def put_file(org_id: str, filename: str, seq: int, sha256: str | None,
              body: bytes) -> None:

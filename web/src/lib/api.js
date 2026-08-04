@@ -53,6 +53,11 @@ export const listStudioOrgs = () => req('/studio/orgs', { auth: true })
 export const getDashboard = () => req('/studio/dashboard', { auth: true })
 export const getTimeline = (id) => req(`/studio/orgs/${id}/timeline`, { auth: true })
 export const ask = (body) => req('/studio/ask', { method: 'POST', body, auth: true })
+export const getTiles = (id) => req(`/studio/orgs/${id}/tiles`, { auth: true })
+export const addTile = (id, question) =>
+  req(`/studio/orgs/${id}/tiles`, { method: 'POST', body: { question }, auth: true })
+export const removeTile = (id, tileId) =>
+  req(`/studio/orgs/${id}/tiles/${tileId}`, { method: 'DELETE', auth: true })
 export const rotateOrgKey = (id) =>
   req(`/studio/orgs/${id}/rotate-key`, { method: 'POST', auth: true })
 export const getOrgContext = (id) => req(`/studio/orgs/${id}/context`, { auth: true })
