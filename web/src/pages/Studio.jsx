@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as api from '../lib/api.js'
+import Block from '../blocks/index.jsx'
 import { t } from '../lib/format.js'
 
 /**
@@ -34,6 +35,33 @@ export default function Studio({ locale, onPublished }) {
   const [dash, setDash] = useState([])
   const [tlOrg, setTlOrg] = useState(null)
   const [timeline, setTimeline] = useState([])
+  const [q, setQ] = useState('')
+  const [qOrg, setQOrg] = useState('')
+  const [qMode, setQMode] = useState('direct')
+  const [answer, setAnswer] = useState(null)
+
+  async function askQuestion(e) {
+    e?.preventDefault()
+    if (!q.trim()) return
+    setAnswer(null)
+    const org = qOrg || orgs[0]?.id
+    if (!org) return
+    const a = await run(() => api.ask({ org, question: q.trim(), mode: qMode }))
+    if (a) setAnswer(a)
+  }
+
+  async function runPlan() {
+    const a = await run(() =>
+      api.ask({
+        org: qOrg || orgs[0]?.id,
+        question: answer.question,
+        mode: 'analyze',
+        execute: true,
+        plan: answer.plan,
+      })
+    )
+    if (a) setAnswer(a)
+  }
 
   async function openTimeline(id) {
     if (tlOrg === id) {
@@ -48,7 +76,13 @@ export default function Studio({ locale, onPublished }) {
   const L = locale === 'fr'
   const refresh = () => {
     if (api.hasToken()) {
-      api.listStudioOrgs().then(setOrgs).catch(() => {})
+      api
+        .listStudioOrgs()
+        .then((os) => {
+          setOrgs(os)
+          setQOrg((cur) => cur || os[0]?.id || '')
+        })
+        .catch(() => {})
       api.getDashboard().then(setDash).catch(() => {})
     }
   }
@@ -248,8 +282,8 @@ export default function Studio({ locale, onPublished }) {
                       <div className="tl-row">
                         <span className="muted">
                           {L
-                            ? 'Aucune analyse pour ce client — chaque passage au panneau 01 laisse une ligne ici.'
-                            : 'No analyse runs for this client yet — every pass through panel 01 leaves a row here.'}
+                            ? 'Aucune analyse pour ce client — chaque passage au panneau 02 laisse une ligne ici.'
+                            : 'No analyse runs for this client yet — every pass through panel 02 leaves a row here.'}
                         </span>
                       </div>
                     )}
@@ -284,10 +318,104 @@ export default function Studio({ locale, onPublished }) {
         </section>
       )}
 
+      {/* -------------------------------------------------------------- ask */}
+      <section className="panel">
+        <div className="panel-h">{L ? '01 · Interroger' : '01 · Ask'}</div>
+        <p>
+          {L
+            ? "Posez une question sur les livres de ce client. « Direct » répond avec ce qui a déjà été calculé — aucun chiffre n'est recalculé et aucun modèle n'y touche. « Analyser » montre d'abord son plan, puis relit les classeurs conservés."
+            : 'Ask a question about this client’s books. “Direct” answers from what has already been computed — nothing is recomputed and no model touches a figure. “Analyse” shows its plan first, then re-reads the kept workbooks.'}
+        </p>
+        <form className="ask-form" onSubmit={askQuestion}>
+          <input
+            className="ask-q"
+            placeholder={L ? "Quelle est l'exécution OPEX ?" : 'What is OPEX execution?'}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <select value={qOrg} onChange={(e) => setQOrg(e.target.value)}>
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+          <div className="lens">
+            {[
+              ['direct', L ? 'Direct' : 'Direct'],
+              ['analyze', L ? 'Analyser' : 'Analyse'],
+            ].map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                aria-selected={qMode === k}
+                onClick={() => setQMode(k)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button type="submit" className="gold-btn" disabled={busy}>
+            {busy ? (L ? '…' : '…') : L ? 'demander' : 'ask'}
+          </button>
+        </form>
+
+        {answer && (
+          <div className="ans">
+            {answer.plan && (
+              <div className="plan">
+                <div className="plan-h">
+                  {L ? 'Plan' : 'Plan'}
+                  <span className="plan-by">
+                    {answer.plan.planner === 'claude'
+                      ? L ? 'choisi par Claude' : 'chosen by Claude'
+                      : L ? 'choisi par règles' : 'chosen by rules'}
+                  </span>
+                </div>
+                <p>{t(answer.plan.rationale, locale)}</p>
+                <ul className="plan-l">
+                  <li>
+                    {L ? 'analyses' : 'analyses'} : {answer.plan.modules.join(' · ') || '—'}
+                  </li>
+                  {answer.plan.metrics.length > 0 && (
+                    <li>
+                      {L ? 'métriques' : 'metrics'} : {answer.plan.metrics.join(' · ')}
+                    </li>
+                  )}
+                  <li>
+                    {L ? 'classeurs' : 'workbooks'} : {answer.plan.files.join(' · ') || '—'}
+                  </li>
+                  <li>
+                    {L ? 'contexte' : 'context'} :{' '}
+                    {answer.plan.context_version ? `v${answer.plan.context_version}` : '—'}
+                  </li>
+                </ul>
+                {answer.blocks.length === 0 && !answer.note && (
+                  <button className="gold-btn" onClick={runPlan} disabled={busy}>
+                    {busy
+                      ? L ? 'analyse…' : 'analysing…'
+                      : L ? 'lancer cette analyse' : 'run this analysis'}
+                  </button>
+                )}
+              </div>
+            )}
+            {answer.note && <div className="note">{t(answer.note, locale)}</div>}
+            {answer.as_of && (
+              <div className="ans-asof">
+                {L ? 'analyse du' : 'analysis of'} {String(answer.as_of).slice(0, 10)}
+              </div>
+            )}
+            {answer.blocks.map((b, i) => (
+              <Block key={i} b={b} locale={locale} sources={answer.sources} />
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* ---------------------------------------------------------- analyse */}
       <section className="panel">
         <div className="panel-h">
-          {L ? '01 · Analyser un classeur' : '01 · Analyse a workbook'}
+          {L ? '02 · Analyser un classeur' : '02 · Analyse a workbook'}
         </div>
         <p>
           {L
@@ -377,8 +505,8 @@ export default function Studio({ locale, onPublished }) {
                 </button>
                 <p className="fine">
                   {L
-                    ? 'Relisez le brouillon — intitulés, unités, lignes — puis publiez-le au panneau 02.'
-                    : 'Review the draft — labels, units, rows — then publish it in panel 02.'}
+                    ? 'Relisez le brouillon — intitulés, unités, lignes — puis publiez-le au panneau 03.'
+                    : 'Review the draft — labels, units, rows — then publish it in panel 03.'}
                 </p>
               </>
             )}
@@ -389,12 +517,12 @@ export default function Studio({ locale, onPublished }) {
       {/* ---------------------------------------------------------- publish */}
       <section className="panel">
         <div className="panel-h">
-          {L ? '02 · Publier un rapport' : '02 · Publish a report'}
+          {L ? '03 · Publier un rapport' : '03 · Publish a report'}
         </div>
         <p>
           {L
-            ? 'Déposez un document de rapport (.json) — écrit à la main ou issu du panneau 01, même règle : validé contre le schéma et contre CH-004, toute valeur sans cellule source est refusée avant enregistrement.'
-            : 'Drop a report document (.json) — hand-written or from panel 01, same rule: validated against the schema and CH-004, any value without a source cell is refused before it is stored.'}
+            ? 'Déposez un document de rapport (.json) — écrit à la main ou issu du panneau 02, même règle : validé contre le schéma et contre CH-004, toute valeur sans cellule source est refusée avant enregistrement.'
+            : 'Drop a report document (.json) — hand-written or from panel 02, same rule: validated against the schema and CH-004, any value without a source cell is refused before it is stored.'}
         </p>
         <label className="drop">
           <input type="file" accept=".json,application/json" onChange={upload} hidden />
@@ -435,7 +563,7 @@ export default function Studio({ locale, onPublished }) {
       {/* ------------------------------------------------------------ share */}
       {result && (
         <section className="panel ok">
-          <div className="panel-h">{L ? '03 · Lien à partager' : '03 · Share link'}</div>
+          <div className="panel-h">{L ? '04 · Lien à partager' : '04 · Share link'}</div>
           <div className="pub-title">
             {t(result.title, locale)} · {t(result.period.label, locale)} ·{' '}
             <span className="mono">{result.status}</span>
@@ -482,7 +610,7 @@ export default function Studio({ locale, onPublished }) {
 
       {/* ----------------------------------------------------------- clients */}
       <section className="panel">
-        <div className="panel-h">{L ? '04 · Clients' : '04 · Clients'}</div>
+        <div className="panel-h">{L ? '05 · Clients' : '05 · Clients'}</div>
         {orgs.length > 0 && (
           <div className="org-list">
             {orgs.map((o) => (

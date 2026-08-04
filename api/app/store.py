@@ -48,11 +48,22 @@ CREATE TABLE IF NOT EXISTS ingestions (
   summary  TEXT NOT NULL,      -- json snapshot of detected tables
   PRIMARY KEY (org, filename, seq)
 );
+CREATE TABLE IF NOT EXISTS files (
+  org      TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  seq      INTEGER NOT NULL,   -- matches the ingestion seq for this file
+  ts       TEXT NOT NULL,
+  sha256   TEXT,
+  body     BLOB NOT NULL,      -- the workbook itself; never leaves this disk
+  PRIMARY KEY (org, filename, seq)
+);
 CREATE TABLE IF NOT EXISTS runs (
   org     TEXT NOT NULL,
   ts      TEXT NOT NULL,
   modules TEXT NOT NULL,       -- json list of "name vX.Y" actually run
-  facts   TEXT NOT NULL        -- json list of numeric facts the run produced
+  facts   TEXT NOT NULL,       -- json list of numeric facts the run produced
+  blocks  TEXT,                -- json blocks, provenance and lineage intact
+  sources TEXT                 -- json sources, so kept blocks still name their files
 );
 CREATE INDEX IF NOT EXISTS runs_org ON runs(org, ts);
 CREATE TABLE IF NOT EXISTS reads (
@@ -82,6 +93,12 @@ def init() -> None:
             con.execute("ALTER TABLE orgs ADD COLUMN share_key TEXT")
         except sqlite3.OperationalError:
             pass  # already present
+        # Runs predating the ask surface kept facts but not the blocks.
+        for col in ("blocks", "sources"):
+            try:
+                con.execute(f"ALTER TABLE runs ADD COLUMN {col} TEXT")
+            except sqlite3.OperationalError:
+                pass  # already present
 
 
 # --------------------------------------------------------------------------
@@ -220,14 +237,70 @@ def list_ingestions(org_id: str) -> list[dict]:
 # is a query, not an archaeology dig.
 # --------------------------------------------------------------------------
 
-def put_run(org_id: str, modules: list[str], facts: list[dict]) -> None:
+def put_file(org_id: str, filename: str, seq: int, sha256: str | None,
+             body: bytes) -> None:
+    """Keep the workbook so a question can be answered against the client's
+    latest books without asking for the file again. It stays on this
+    service's own disk — the same promise as the rest of the platform."""
     from datetime import datetime, timezone
 
     with connect() as con:
         con.execute(
-            "INSERT INTO runs (org, ts, modules, facts) VALUES (?,?,?,?)",
+            "INSERT INTO files (org, filename, seq, ts, sha256, body) "
+            "VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(org, filename, seq) DO UPDATE SET "
+            "  ts=excluded.ts, sha256=excluded.sha256, body=excluded.body",
+            (org_id, filename, seq, datetime.now(timezone.utc).isoformat(),
+             sha256, body),
+        )
+
+
+def latest_files(org_id: str) -> list[dict]:
+    """The newest kept copy of every workbook this client has sent, in the
+    order they were first ingested — file 0 stays file 0 across questions."""
+    with connect() as con:
+        rows = con.execute(
+            "SELECT f.filename, f.seq, f.ts, f.sha256, f.body FROM files f "
+            "JOIN (SELECT filename, MAX(seq) AS seq FROM files WHERE org = ? "
+            "      GROUP BY filename) m "
+            "  ON m.filename = f.filename AND m.seq = f.seq "
+            "WHERE f.org = ? ORDER BY f.ts, f.filename",
+            (org_id, org_id),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def latest_file_names(org_id: str) -> list[str]:
+    """Which books a question would read — without loading any of them."""
+    with connect() as con:
+        rows = con.execute(
+            "SELECT filename, MIN(ts) AS first_ts FROM files WHERE org = ? "
+            "GROUP BY filename ORDER BY first_ts, filename",
+            (org_id,),
+        ).fetchall()
+    return [r["filename"] for r in rows]
+
+
+def forget_files(org_id: str) -> int:
+    """Drop every kept workbook for a client. The reports stay; the raw
+    books do not. Retention is the client's call, so it must be undoable."""
+    with connect() as con:
+        cur = con.execute("DELETE FROM files WHERE org = ?", (org_id,))
+    return cur.rowcount
+
+
+def put_run(org_id: str, modules: list[str], facts: list[dict],
+            blocks: list | None = None, sources: list | None = None) -> None:
+    from datetime import datetime, timezone
+
+    with connect() as con:
+        con.execute(
+            "INSERT INTO runs (org, ts, modules, facts, blocks, sources) "
+            "VALUES (?,?,?,?,?,?)",
             (org_id, datetime.now(timezone.utc).isoformat(),
-             json.dumps(modules), json.dumps(facts)),
+             json.dumps(modules), json.dumps(facts),
+             json.dumps(blocks) if blocks is not None else None,
+             json.dumps(sources) if sources is not None else None),
         )
 
 
@@ -241,6 +314,27 @@ def list_runs(org_id: str, limit: int = 30) -> list[dict]:
     return [
         {"ts": r["ts"], "modules": json.loads(r["modules"]),
          "facts": json.loads(r["facts"])}
+        for r in rows
+    ]
+
+
+def recent_run_blocks(org_id: str, limit: int = 6) -> list[dict]:
+    """Recent analyses that kept their blocks, newest first — the pool a
+    Direct answer draws from. A pool, not just the last run: a narrow
+    answer about one thing must not hide what a fuller analysis found."""
+    with connect() as con:
+        rows = con.execute(
+            "SELECT ts, modules, blocks, sources FROM runs "
+            "WHERE org = ? AND blocks IS NOT NULL ORDER BY ts DESC LIMIT ?",
+            (org_id, limit),
+        ).fetchall()
+    return [
+        {
+            "ts": r["ts"],
+            "modules": json.loads(r["modules"]),
+            "blocks": json.loads(r["blocks"]),
+            "sources": json.loads(r["sources"] or "[]"),
+        }
         for r in rows
     ]
 

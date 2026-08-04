@@ -808,6 +808,130 @@ def test_registry_definition_travels_into_the_report(client, auth):
 
 
 # --------------------------------------------------------------------------
+# the ask surface — a question in, a verified answer out
+# --------------------------------------------------------------------------
+
+ASK_BUDGET = {"opex": [
+    ["Poste", "Jan", "Fév", "Mar", "Avr"],
+    ["Salaires", 60, 70, 70, 60],
+    ["TOTAL DEPENSES OPEX", 100, 100, 100, 100],
+]}
+ASK_ACTUAL = {"reel": [
+    ["Opération", "Jan", "Fév", "Mar"],
+    ["Plantations", 10, 20, 10],
+    ["TOTAL SITE", 20, 50, 50],
+]}
+
+
+@pytest.fixture(scope="module")
+def asked(client, auth):
+    """A client whose books have been analysed once — the state every
+    question is asked against."""
+    client.post("/v1/orgs", json={"id": "ask", "name": "Ask", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/ask/context", json={
+        "modules": ["budget-vs-actual"],
+        "metrics": {"OPEX": {
+            "budget": {"sheet": "opex", "label": "TOTAL DEPENSES"},
+            "actual": {"sheet": "reel", "label": "TOTAL SITE"},
+            "definition": {"fr": "Charges d'exploitation", "en": "Operating expenses"},
+        }},
+    }, headers=auth)
+    _ingest_many(client, auth, [ASK_BUDGET, ASK_ACTUAL], "ask")
+    return "ask"
+
+
+def _ask(client, auth, **body):
+    return client.post("/v1/studio/ask", json=body, headers=auth)
+
+
+def test_direct_answers_from_the_stored_analysis(client, auth, asked):
+    r = _ask(client, auth, org=asked, question="Quelle est l'exécution OPEX ?")
+    assert r.status_code == 200
+    a = r.json()
+    assert a["mode"] == "direct" and a["as_of"]
+    kpi = a["blocks"][0]["items"][0]
+    # the stored block is the answer: same figure, provenance and lineage intact
+    assert kpi["value"]["n"] == pytest.approx(40.0, abs=0.1)
+    assert kpi["value"]["src"]["cells"]
+    assert len(kpi["lineage"]) == 3
+    assert kpi["definition"]["fr"] == "Charges d'exploitation"
+    # and it names the files the figures came from
+    assert len(a["sources"]) == 2
+
+
+def test_direct_says_so_when_nothing_stored_matches(client, auth, asked):
+    a = _ask(client, auth, org=asked, question="Combien de tracteurs ?").json()
+    assert a["blocks"] == []
+    assert "Analyser" in a["note"]["fr"] or "Analyse" in a["note"]["en"]
+
+
+def test_analyze_shows_its_plan_before_running(client, auth, asked):
+    a = _ask(client, auth, org=asked, mode="analyze",
+             question="Quelle est l'exécution du budget OPEX ?").json()
+    assert a["blocks"] == []                       # nothing ran yet
+    plan = a["plan"]
+    assert "budget-vs-actual" in plan["modules"]
+    assert plan["metrics"] == ["OPEX"]
+    assert plan["context_version"] == 1
+    assert len(plan["files"]) == 2                 # the kept workbooks
+    assert plan["rationale"]["fr"]
+
+
+def test_analyze_runs_the_plan_and_recomputes(client, auth, asked):
+    plan = _ask(client, auth, org=asked, mode="analyze",
+                question="exécution OPEX").json()["plan"]
+    a = _ask(client, auth, org=asked, mode="analyze", execute=True,
+             question="exécution OPEX", plan=plan).json()
+    kpi = next(b for b in a["blocks"] if b["type"] == "kpiGrid")["items"][0]
+    assert kpi["value"]["n"] == pytest.approx(40.0, abs=0.1)
+    assert kpi["lineage"][0]["n"] == 120           # recomputed from the kept books
+    # the answer joins the timeline like any other analysis
+    runs = client.get(f"/v1/studio/orgs/{asked}/timeline", headers=auth).json()
+    assert len(runs) >= 2
+
+
+def test_a_narrow_answer_does_not_bury_a_broader_one(client, auth, asked):
+    """Asking one narrow question stores a narrow run. Direct must still
+    find what the fuller analysis computed — it searches a pool of recent
+    runs, not only the last one."""
+    narrow = _ask(client, auth, org=asked, mode="analyze",
+                  question="mouvements", plan={"modules": ["movements"],
+                                               "rationale": {"fr": "test"}},
+                  execute=True).json()
+    assert narrow["note"] or narrow["blocks"] is not None  # ran, whatever it found
+    a = _ask(client, auth, org=asked, question="exécution OPEX").json()
+    kpi = a["blocks"][0]["items"][0]
+    assert kpi["value"]["n"] == pytest.approx(40.0, abs=0.1)
+
+
+def test_ask_refuses_unknown_modules_and_unknown_orgs(client, auth, asked):
+    bad = {"modules": ["rm -rf"], "rationale": {"fr": "x"}}
+    r = _ask(client, auth, org=asked, mode="analyze", execute=True,
+             question="x", plan=bad)
+    assert r.status_code == 422
+    assert _ask(client, auth, org="ghost", question="x").status_code == 404
+    assert client.post("/v1/studio/ask",
+                       json={"org": asked, "question": "x"}).status_code == 401
+
+
+def test_workbooks_are_kept_only_while_the_client_allows_it(client, auth):
+    from app import store
+
+    client.post("/v1/orgs", json={"id": "noret", "name": "NoRet", "sub": {"fr": "K"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/noret/context",
+               json={"modules": ["budget-vs-actual"], "retain_files": False},
+               headers=auth)
+    _ingest_many(client, auth, [ASK_BUDGET], "noret")
+    assert store.latest_file_names("noret") == []
+    # and retention is undoable for a client that did allow it
+    assert store.latest_file_names("ask")
+    assert store.forget_files("ask") > 0
+    assert store.latest_file_names("ask") == []
+
+
+# --------------------------------------------------------------------------
 # hand authoring — the template shipped to authors must publish as-is
 # --------------------------------------------------------------------------
 

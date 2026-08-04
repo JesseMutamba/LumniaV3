@@ -336,6 +336,32 @@ td.pos{color:var(--gold)}
   font-family:var(--mono);font-size:11px;line-height:1.6;letter-spacing:.06em;
   color:var(--mut-6)}
 .reads .link{font-size:12px}
+/* ask surface */
+.ask-form{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center}
+.ask-q{appearance:none;background:rgba(11,25,16,.6);border:1px solid var(--line-input);
+  border-radius:2px;padding:13px 14px;font-family:var(--sans);font-size:15px;
+  line-height:1;color:var(--bright)}
+.ask-q:hover{border-color:rgba(235,231,222,.3)}
+.ask-form select{appearance:none;background:rgba(11,25,16,.6);border:1px solid var(--line-input);
+  border-radius:2px;padding:12px 13px;font-family:var(--mono);font-size:12px;
+  color:var(--ink)}
+.ask-form .gold-btn{white-space:nowrap}
+.ask-form .lens{margin:0}
+.ans{margin-top:22px}
+.ans .b{margin-bottom:20px}
+.ans-asof{font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--mut-42);margin-bottom:14px}
+.plan{border:1px solid var(--line-soft);border-left:2px solid var(--gold);
+  border-radius:0 3px 3px 0;background:var(--well);padding:16px 18px;margin-bottom:20px}
+.plan-h{display:flex;justify-content:space-between;gap:16px;
+  font-family:var(--mono);font-weight:500;font-size:10px;line-height:1;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--mut-42);margin-bottom:10px}
+.plan-by{letter-spacing:.12em;color:var(--gold-dim);text-transform:none}
+.plan p{font-family:var(--sans);font-size:13.5px;line-height:1.6;color:var(--ink);margin:0 0 10px}
+.plan-l{list-style:none;padding:0;margin:0 0 14px}
+.plan-l li{font-family:var(--mono);font-size:11.5px;line-height:1.9;color:var(--mut-6)}
+@media(max-width:900px){.ask-form{grid-template-columns:1fr}}
+
 /* report dashboard lens */
 .lens{display:inline-flex;border:1px solid var(--line-soft);border-radius:3px;
   overflow:hidden;margin:0 0 34px}

@@ -104,6 +104,7 @@ async def ingest(
     """One or several workbooks in one session — budget and actuals side by
     side. Sources are indexed in upload order; provenance carries the file."""
     wbs = []
+    bodies: dict[int, bytes] = {}
     for i, f in enumerate(file):
         ext = Path(f.filename or "").suffix.lower()
         if ext not in ALLOWED:
@@ -111,6 +112,7 @@ async def ingest(
         body = await f.read()
         if len(body) > MAX_BYTES:
             raise HTTPException(413, f"File exceeds {MAX_BYTES // 1024 // 1024} MB")
+        bodies[i] = body
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
             tmp.write(body)
             tmp_path = Path(tmp.name)
@@ -192,9 +194,13 @@ async def ingest(
                 continue
             snap = snapshot(wb, own)
             prev = store.last_ingestion(org, wb.source.filename)
-            seqs.append(
-                store.put_ingestion(org, wb.source.filename, wb.source.sha256, snap)
-            )
+            seq = store.put_ingestion(org, wb.source.filename, wb.source.sha256, snap)
+            seqs.append(seq)
+            # Keep the workbook itself when the client's context allows, so a
+            # question can be asked of these books without a re-upload.
+            if (ctx.retain_files if ctx else True) and wb.source.idx in bodies:
+                store.put_file(org, wb.source.filename, seq, wb.source.sha256,
+                               bodies[wb.source.idx])
             if prev:
                 prev_ts = prev_ts or prev["ts"]
                 threshold = ctx.alert_threshold_pct if ctx else 20.0
@@ -232,7 +238,13 @@ async def ingest(
         # behind, so the same figure can be watched across versions of
         # the client's file.
         if modules_run and store.get_org(org):
-            store.put_run(org, modules_run, facts_of(blocks))
+            store.put_run(
+                org,
+                modules_run,
+                facts_of(blocks),
+                blocks=[b.model_dump(mode="json") for b in blocks],
+                sources=[wb.source.model_dump(mode="json") for wb in wbs],
+            )
 
     return Inventory(
         sources=[wb.source for wb in wbs],
