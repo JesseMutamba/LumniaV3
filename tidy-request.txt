@@ -1,0 +1,18 @@
+# Housekeeping request against the live service. Filling in the two fields
+# below and pushing runs .github/workflows/tidy.yml. Blank them again once
+# the run has gone through, or the next push replays a request that has
+# already been carried out — deleting a client that is already gone fails.
+#
+# Carried out 2026-08-04, run 30957311920:
+#   retract: pvak-fy26-q1, pvak-mwebe-t1-2026, pvak-q1-2026
+#     Superseded by pvak-t1-2026-position and carrying figures the client's
+#     auditor flagged, including a KPI that rendered 3 950 % where the truth
+#     was 39,5 %. Retracted rather than deleted, so an old link says a figure
+#     was wrong instead of returning a bare 404.
+#   delete_orgs: pvack, 123
+#     pvack was an empty duplicate of pvak whose portal link opened on
+#     nothing. 123 was a test client. Neither held a report.
+#   Result: pvak (PVAK), 1 published report.
+
+retract:
+delete_orgs:
