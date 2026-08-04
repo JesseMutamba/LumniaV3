@@ -79,9 +79,12 @@ export function importReport(file) {
 }
 
 export function ingestWorkbook(files, orgId) {
+  // No silent default: a workbook filed under a guessed client is worse
+  // than one not filed at all.
+  if (!orgId) throw new Error('No client selected for this workbook.')
   const fd = new FormData()
   for (const f of Array.isArray(files) ? files : [files]) fd.append('file', f)
-  return req(`/studio/ingest?org=${encodeURIComponent(orgId || 'client')}`, {
+  return req(`/studio/ingest?org=${encodeURIComponent(orgId)}`, {
     method: 'POST',
     body: fd,
     auth: true,
