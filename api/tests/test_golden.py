@@ -249,6 +249,44 @@ def test_g3f_a_label_matches_its_row_exactly_before_any_other(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# G3g · trajectory: the plan read from the client's sheet, not retyped
+# --------------------------------------------------------------------------
+
+def test_g3g_trajectory_reads_the_plan_and_keeps_every_cell(tmp_path):
+    """A trajectory retyped into a slide is one nobody can check. Rows that
+    start in different years must still line up under the right year, and a
+    negative balance must survive to the page."""
+    recap = {"RECAP": [
+        ["PROJECTIONS"],
+        [None, "2019-2021", 2025, 2026, 2027],
+        ["REVENUES BRUTS", None, 238939, 771190, 1081920],
+        ["SOUS-TOTAL OPEX", None, None, 457300, 641557],   # starts a year later
+        ["BALANCE", None, None, -556220, -197817],
+    ]}
+    ctx = ContextIn(modules=["trajectory"], timelines={"Plan": {
+        "sheet": "RECAP", "unit": "USD",
+        "rows": {"Revenus": "REVENUES BRUTS", "OPEX": "SOUS-TOTAL OPEX",
+                 "Solde": "BALANCE"},
+        "chart": ["Revenus", "OPEX"],
+    }})
+    blocks, _ = _run([recap], ctx, tmp_path)
+    table = next(b for b in blocks if getattr(b, "type", "") == "table")
+    assert [c.key for c in table.columns] == ["item", "y2025", "y2026", "y2027"]
+    rows = {r["item"]: r for r in table.rows}
+    # revenue starts in 2025, OPEX in 2026 — each under its own year
+    assert rows["Revenus"]["y2025"].n == 238939
+    assert "y2025" not in rows["OPEX"]
+    assert rows["OPEX"]["y2026"].n == 457300
+    # the plan's own negative balance reaches the page intact
+    assert rows["Solde"]["y2026"].n == -556220
+    # and every figure still carries the cell it came from
+    assert rows["Revenus"]["y2025"].src.cells == "C3"
+    assert rows["Solde"]["y2026"].src.cells == "D5"
+    bar = next(b for b in blocks if getattr(b, "type", "") == "barPair")
+    assert bar.x == ["2025", "2026", "2027"]
+
+
+# --------------------------------------------------------------------------
 # G4 · coverage: uncoded entries, and the balance column that is not an amount
 # --------------------------------------------------------------------------
 

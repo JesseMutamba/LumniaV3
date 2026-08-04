@@ -308,6 +308,21 @@ class RatioDef(BaseModel):
     owner: str | None = None
 
 
+class TimelineDef(BaseModel):
+    """A multi-year summary the client already keeps — the plan's own
+    trajectory table. Rows are named by the label they carry in the sheet;
+    the year each column belongs to is read from the sheet's own header, so
+    nothing about the horizon is assumed."""
+
+    model_config = ConfigDict(extra="forbid")
+    sheet: str
+    rows: dict[str, str]             # display name -> row label in the sheet
+    unit: Unit = "USD"
+    years_row: int | None = None     # 1-based; detected when absent
+    chart: list[str] = []            # up to two row names to draw
+    definition: Text | None = None
+
+
 class ContextIn(BaseModel):
     """What the author saves: the client's parsing knowledge.
 
@@ -328,6 +343,7 @@ class ContextIn(BaseModel):
     reconcile_sheets: list[str] = []     # cash journals to cross-match; empty = all
     metrics: dict[str, MetricDef] = {}   # named budget-vs-actual comparisons
     ratios: dict[str, RatioDef] = {}     # rates between two metrics
+    timelines: dict[str, TimelineDef] = {}  # multi-year plan summaries
     journal_code_column: str | None = None  # header of the routing-code column ("CODE")
     retain_files: bool = True            # keep the workbooks so questions can be asked of them
 
