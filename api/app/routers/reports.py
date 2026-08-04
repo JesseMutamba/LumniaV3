@@ -254,6 +254,27 @@ def get_orgs_as_author():
     return out
 
 
+@router.delete(
+    "/studio/orgs/{org_id}",
+    status_code=204,
+    tags=["studio"],
+    dependencies=[author],
+)
+def delete_org(org_id: str):
+    """Remove a client that should never have existed — a typo, a test.
+
+    Refused while the client holds any report, published or not: somebody
+    may be holding that link, and a deleted client turns it into a bare 404.
+    Retract the reports first, which tells the reader something instead.
+    """
+    try:
+        gone = store.delete_org(org_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    if not gone:
+        raise HTTPException(404, f"Unknown org: {org_id}")
+
+
 @router.post(
     "/studio/orgs/{org_id}/rotate-key",
     response_model=StudioOrg,
