@@ -1,0 +1,104 @@
+# One-shot: publishes the PVAK Q1 2026 position report to the live
+# platform, so stakeholders can read it behind the client portal.
+#
+# The payload (seed/pvak.enc) is the client's private financial data,
+# AES-256 encrypted under LUMNIA_ADMIN_TOKEN — the same secret that gates
+# publishing, so this file grants nothing the token does not already grant.
+# The transport files are removed from the branch once the run succeeds, and
+# no response body is printed: share keys stay out of these public logs.
+name: Publish PVAK Q1 2026
+
+on:
+  push:
+    branches: [claude/new-session-h91lyu]
+    paths:
+      - "seed/pvak.enc"
+      - ".github/workflows/publish-pvak.yml"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decrypt, save context, retain workbooks, publish the report
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          set -e
+          if [ -z "$TOKEN" ]; then echo "secret missing - skipping"; exit 0; fi
+          [ -f seed/pvak.enc ] || { echo "no payload on this ref"; exit 0; }
+
+          printf '%s' "$TOKEN" > .pass
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -in seed/pvak.enc -out envelope.json -pass file:.pass
+          rm .pass
+
+          python3 - <<'PY'
+          import base64, json
+          env = json.load(open("envelope.json"))
+          for k in ("org", "context", "report"):
+              json.dump(env[k], open(f"{k}.json", "w"))
+          for wb in env["workbooks"]:
+              open(wb["name"], "wb").write(base64.b64decode(wb["b64"]))
+              print("workbook:", wb["name"])
+          PY
+
+          for i in $(seq 1 20); do
+            if curl -sS -m 20 "$API/health" | python3 -c "import sys,json;exit(0 if json.load(sys.stdin).get('ok') else 1)" 2>/dev/null; then
+              echo "api is up"; break
+            fi
+            echo "waiting for api ($i)"; sleep 15
+          done
+
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$API/orgs" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data-binary @org.json); echo "org: $code"
+
+          # A context is refused whole when it names something the deployed
+          # build does not know — by design, so nothing is silently dropped.
+          # Wait for the build that carries the modules this context needs
+          # rather than racing the deploy.
+          for i in $(seq 1 40); do
+            if curl -sS -m 20 "$API/studio/modules" -H "Authorization: Bearer $TOKEN" \
+               | python3 -c "import sys,json;n={m['name'] for m in json.load(sys.stdin)};exit(0 if {'trajectory','efficiency','history'} <= n else 1)" 2>/dev/null; then
+              echo "deployed build carries the modules"; break
+            fi
+            echo "waiting for the deploy to carry trajectory+efficiency ($i)"; sleep 20
+          done
+
+          code=$(curl -sS -o ctx.json -w "%{http_code}" -X PUT "$API/studio/orgs/pvak/context" \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            --data-binary @context.json); echo "context: $code"
+          [ "$code" = "200" ] || { head -c 400 ctx.json; exit 1; }
+
+          # Analysing on the live service retains the workbooks so the ask
+          # surface can answer from them later. It is a convenience, not the
+          # deliverable: these two workbooks are heavy and the small instance
+          # can refuse them, which must not stop the report from reaching its
+          # readers. Best effort, never fatal.
+          code=$(curl -sS -o ingest.json -w "%{http_code}" -m 600 --http1.1 \
+            -X POST "$API/studio/ingest?org=pvak" \
+            -H "Authorization: Bearer $TOKEN" \
+            -F "file=@Montage_financier_2025_a_2030.xlsx" \
+            -F "file=@SUIVI_FINANCES_PVAK_V1.xlsx" || echo 000); echo "analyse: $code"
+          python3 -c "import json;print('modules run:', ', '.join(json.load(open('ingest.json')).get('modules_run',[])))" 2>/dev/null \
+            || echo "analyse did not complete — the report below does not depend on it"
+
+          # The deliverable. Wait out any restart the analyse may have caused.
+          for i in $(seq 1 8); do
+            curl -sS -m 30 "$API/health" >/dev/null 2>&1 || sleep 15
+            code=$(curl -sS -o publish.json -w "%{http_code}" -m 120 --http1.1 \
+              -X POST "$API/orgs/pvak/reports" \
+              -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+              --data-binary @report.json || echo 000)
+            echo "publish attempt $i: $code"
+            if [ "$code" = "200" ] || [ "$code" = "201" ]; then break; fi
+            sleep 20
+          done
+          [ "$code" = "200" ] || [ "$code" = "201" ] || { python3 -c "import json;print(str(json.load(open('publish.json')).get('detail'))[:400])"; exit 1; }
+          KEY=$(python3 -c "import json;print(json.load(open('publish.json'))['share_key'])")
+          echo "::add-mask::$KEY"
+          echo "Published pvak-t1-2026-position. The links carry secret keys and live in Studio: panel 05 for the portal link, panel 04 after opening the report."
+
+# re-run: the live service now carries the trajectory module
