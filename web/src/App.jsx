@@ -22,6 +22,8 @@ function parseHash() {
   const q = new URLSearchParams(qs || '')
   const m = path.match(/^\/r\/([^/?]+)/)
   if (m) return { view: 'report', id: decodeURIComponent(m[1]), key: q.get('k') }
+  const c = path.match(/^\/c\/([^/?]+)/)
+  if (c) return { view: 'portal', id: decodeURIComponent(c[1]), key: q.get('k') }
   if (path.startsWith('/studio')) return { view: 'studio' }
   return { view: 'home' }
 }
@@ -44,7 +46,7 @@ export default function App() {
           <span>Lumnia</span>
         </a>
         <div className="grow" />
-        {route.view !== 'report' && (
+        {route.view !== 'report' && route.view !== 'portal' && (
           <a className="tbtn" href={route.view === 'studio' ? '#/' : '#/studio'}>
             {route.view === 'studio' ? (locale === 'fr' ? 'accueil' : 'home') : 'studio'}
           </a>
@@ -60,6 +62,9 @@ export default function App() {
 
       {route.view === 'report' && (
         <Viewer id={route.id} shareKey={route.key} locale={locale} />
+      )}
+      {route.view === 'portal' && (
+        <PortalPage id={route.id} shareKey={route.key} locale={locale} />
       )}
       {route.view === 'studio' && <Studio locale={locale} />}
       {route.view === 'home' && <Home locale={locale} />}
@@ -111,6 +116,77 @@ function Home({ locale }) {
         ) : (
           <span className="warn">{L ? "l'API ne répond pas" : 'API not responding'}</span>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------- portal */
+
+function PortalPage({ id, shareKey, locale }) {
+  const [portal, setPortal] = useState(null)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    setPortal(null)
+    setErr(null)
+    api.getPortal(id, shareKey).then(setPortal).catch(setErr)
+  }, [id, shareKey])
+
+  const L = locale === 'fr'
+
+  if (err)
+    return (
+      <div className="doc">
+        <div className="gone">
+          <div className="ic">⌖</div>
+          <h2>{L ? 'Lien introuvable ou expiré' : 'Link not found or expired'}</h2>
+          <p>
+            {L
+              ? 'Vérifiez le lien complet, y compris la clé après « ?k= ».'
+              : 'Check the full link, including the key after “?k=”.'}
+          </p>
+        </div>
+      </div>
+    )
+
+  if (!portal) return <div className="doc skel">…</div>
+
+  return (
+    <div className="doc">
+      <div className="rep-head">
+        <h1>{portal.org.name}</h1>
+        <div className="meta">
+          <span className="chip">{t(portal.org.sub, locale)}</span>
+        </div>
+      </div>
+
+      <div className="b-label">{L ? 'Rapports' : 'Reports'}</div>
+      {portal.reports.length === 0 && (
+        <p className="b-prose">
+          {L
+            ? 'Aucun rapport publié pour le moment. Celui-ci apparaîtra ici dès sa publication.'
+            : 'No reports published yet. The first one will appear here the moment it is.'}
+        </p>
+      )}
+      <div className="pl">
+        {portal.reports.map((r) => (
+          <a key={r.id} className="pl-row" href={`#/r/${r.id}?k=${r.share_key}`}>
+            <span className="pl-t">{t(r.title, locale)}</span>
+            <span className="pl-m">{t(r.period.label, locale)}</span>
+            <span className="pl-m">{String(r.generated_at ?? '').slice(0, 10)}</span>
+            <span className="pl-a">→</span>
+          </a>
+        ))}
+      </div>
+
+      <div className="foot">
+        <div className="rule">
+          {L
+            ? "Chaque chiffre de ces rapports porte l'adresse de la cellule dont il provient."
+            : 'Every figure in these reports carries the address of the cell it came from.'}
+        </div>
+        <div className="sig">Lumnia</div>
       </div>
     </div>
   )

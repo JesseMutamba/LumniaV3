@@ -44,9 +44,14 @@ export const health = () => req('/health')
 export const listOrgs = () => req('/orgs')
 export const listReports = (orgId) => req(`/orgs/${orgId}/reports`)
 export const getReport = (id, key) => req(`/reports/${id}?k=${encodeURIComponent(key || '')}`)
+export const getPortal = (orgId, key) =>
+  req(`/portal/${orgId}?k=${encodeURIComponent(key || '')}`)
 
 /* -------------------------------------------------------------- authoring */
 export const createOrg = (org) => req('/orgs', { method: 'POST', body: org, auth: true })
+export const listStudioOrgs = () => req('/studio/orgs', { auth: true })
+export const rotateOrgKey = (id) =>
+  req(`/studio/orgs/${id}/rotate-key`, { method: 'POST', auth: true })
 export const getReportAsAuthor = (id) => req(`/studio/reports/${id}`, { auth: true })
 export const setStatus = (id, s) =>
   req(`/studio/reports/${id}/status?new_status=${s}`, { method: 'PATCH', auth: true })
@@ -70,3 +75,7 @@ export function ingestWorkbook(file) {
 /** Share URL for a stakeholder. Same origin as whatever they're reading. */
 export const shareUrl = (rep) =>
   `${location.origin}${location.pathname}#/r/${rep.id}?k=${rep.share_key}`
+
+/** Portal URL for a client — one link, every published report behind it. */
+export const portalUrl = (org) =>
+  `${location.origin}${location.pathname}#/c/${org.id}?k=${org.share_key}`

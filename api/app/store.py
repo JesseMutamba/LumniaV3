@@ -19,9 +19,10 @@ DB_PATH = Path(os.getenv("LUMNIA_DB") or Path(__file__).resolve().parent.parent 
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orgs (
-  id    TEXT PRIMARY KEY,
-  name  TEXT NOT NULL,
-  sub   TEXT NOT NULL          -- json Text
+  id        TEXT PRIMARY KEY,
+  name      TEXT NOT NULL,
+  sub       TEXT NOT NULL,     -- json Text
+  share_key TEXT               -- portal key; grants read of this org's published reports
 );
 CREATE TABLE IF NOT EXISTS reports (
   id           TEXT PRIMARY KEY,
@@ -45,6 +46,11 @@ def connect() -> sqlite3.Connection:
 def init() -> None:
     with connect() as con:
         con.executescript(SCHEMA)
+        # Databases created before the portal existed lack the column.
+        try:
+            con.execute("ALTER TABLE orgs ADD COLUMN share_key TEXT")
+        except sqlite3.OperationalError:
+            pass  # already present
 
 
 # --------------------------------------------------------------------------
@@ -80,6 +86,19 @@ def list_orgs() -> list[Org]:
 
 def get_org(org_id: str) -> Org | None:
     return next((o for o in list_orgs() if o.id == org_id), None)
+
+
+def get_org_key(org_id: str) -> str | None:
+    """The portal key lives beside the org but outside the public Org model,
+    so no public endpoint can leak it by accident."""
+    with connect() as con:
+        row = con.execute("SELECT share_key FROM orgs WHERE id = ?", (org_id,)).fetchone()
+    return row["share_key"] if row else None
+
+
+def set_org_key(org_id: str, key: str) -> None:
+    with connect() as con:
+        con.execute("UPDATE orgs SET share_key = ? WHERE id = ?", (key, org_id))
 
 
 # --------------------------------------------------------------------------

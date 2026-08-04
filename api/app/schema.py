@@ -225,12 +225,36 @@ class ReportStub(BaseModel):
     pipeline_version: str
 
 
+class PortalReport(ReportStub):
+    """A stub plus the key that opens it. Only ever inside a portal payload —
+    the portal-key holder is entitled to read every published report here."""
+
+    share_key: str
+
+
+class Portal(BaseModel):
+    """What a stakeholder holding a client's portal link sees: the client and
+    its published reports, nothing else. There is no way to enumerate other
+    clients from here."""
+
+    model_config = ConfigDict(extra="forbid")
+    org: "Org"
+    reports: list[PortalReport]
+
+
 class Org(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     name: str
     sub: Text
     report_count: int = 0
+
+
+class StudioOrg(Org):
+    """Org plus its portal key — appears only in author-authenticated
+    responses, never on a public endpoint."""
+
+    share_key: str | None = None
 
 
 class OrgIn(BaseModel):
@@ -240,3 +264,6 @@ class OrgIn(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,38}$")
     name: str = Field(min_length=1, max_length=80)
     sub: Text
+
+
+Portal.model_rebuild()

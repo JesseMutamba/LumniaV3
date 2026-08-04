@@ -17,11 +17,14 @@ export default function Studio({ locale, onPublished }) {
   const [err, setErr] = useState(null)
   const [result, setResult] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [copiedOrg, setCopiedOrg] = useState(null)
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
   const L = locale === 'fr'
-  const refresh = () => api.listOrgs().then(setOrgs).catch(() => {})
-  useEffect(() => { refresh() }, [])
+  const refresh = () => {
+    if (api.hasToken()) api.listStudioOrgs().then(setOrgs).catch(() => {})
+  }
+  useEffect(() => { refresh() }, [token])
 
   function saveToken(v) {
     api.setToken(v.trim())
@@ -192,6 +195,18 @@ export default function Studio({ locale, onPublished }) {
                 <span className="muted">
                   {o.report_count} {L ? 'rapports' : 'reports'}
                 </span>
+                <button
+                  className="link"
+                  onClick={() => {
+                    navigator.clipboard.writeText(api.portalUrl(o))
+                    setCopiedOrg(o.id)
+                    setTimeout(() => setCopiedOrg(null), 2000)
+                  }}
+                >
+                  {copiedOrg === o.id
+                    ? L ? 'copié' : 'copied'
+                    : L ? 'lien portail' : 'portal link'}
+                </button>
               </div>
             ))}
           </div>

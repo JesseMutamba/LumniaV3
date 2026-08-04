@@ -170,3 +170,50 @@ def test_author_can_read_without_a_key(client, auth, org):
     client.post(f"/v1/orgs/{org}/reports", json=doc("r-auth"), headers=auth)
     r = client.get("/v1/studio/reports/r-auth", headers=auth)
     assert r.status_code == 200 and r.json()["share_key"]
+
+
+# -------------------------------------------------------------- portal ---
+
+def _portal_key(client, auth, org):
+    orgs = client.get("/v1/studio/orgs", headers=auth).json()
+    return next(o["share_key"] for o in orgs if o["id"] == org)
+
+
+def test_portal_requires_the_org_key(client, auth, org):
+    key = _portal_key(client, auth, org)
+    assert key and len(key) == 32
+    assert client.get(f"/v1/portal/{org}").status_code == 404
+    assert client.get(f"/v1/portal/{org}?k=nope").status_code == 404
+    assert client.get("/v1/portal/ghost?k=" + key).status_code == 404
+    assert client.get(f"/v1/portal/{org}?k={key}").status_code == 200
+
+
+def test_portal_lists_only_published(client, auth, org):
+    client.post(f"/v1/orgs/{org}/reports", json=doc("p-pub"), headers=auth)
+    client.post(f"/v1/orgs/{org}/reports", json=doc("p-dra", status="draft"), headers=auth)
+    client.post(f"/v1/orgs/{org}/reports", json=doc("p-ret"), headers=auth)
+    client.patch("/v1/studio/reports/p-ret/status?new_status=retracted", headers=auth)
+    key = _portal_key(client, auth, org)
+    body = client.get(f"/v1/portal/{org}?k={key}").json()
+    ids = [r["id"] for r in body["reports"]]
+    assert "p-pub" in ids and "p-dra" not in ids and "p-ret" not in ids
+    # each entry carries a working report link
+    entry = next(r for r in body["reports"] if r["id"] == "p-pub")
+    assert client.get(f"/v1/reports/p-pub?k={entry['share_key']}").status_code == 200
+
+
+def test_rotating_the_portal_key_kills_the_old_link(client, auth, org):
+    old = _portal_key(client, auth, org)
+    new = client.post(f"/v1/studio/orgs/{org}/rotate-key", headers=auth).json()["share_key"]
+    assert new != old
+    assert client.get(f"/v1/portal/{org}?k={old}").status_code == 404
+    assert client.get(f"/v1/portal/{org}?k={new}").status_code == 200
+
+
+def test_public_org_list_never_leaks_keys(client):
+    for o in client.get("/v1/orgs").json():
+        assert "share_key" not in o
+
+
+def test_studio_org_list_requires_the_token(client):
+    assert client.get("/v1/studio/orgs").status_code == 401

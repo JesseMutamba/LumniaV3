@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from .. import store
 from ..auth import check_share_key, new_share_key, require_author
 from ..pipeline.checks import check_provenance
-from ..schema import Org, OrgIn, Report, ReportStub
+from ..schema import Org, OrgIn, Portal, PortalReport, Report, ReportStub, StudioOrg
 
 router = APIRouter()
 author = Depends(require_author)
@@ -35,6 +35,7 @@ def create_org(body: OrgIn):
     if store.get_org(body.id):
         raise HTTPException(409, f"Org already exists: {body.id}")
     store.put_org(body.id, body.name, body.sub)
+    store.set_org_key(body.id, new_share_key())
     return store.get_org(body.id)
 
 
@@ -43,6 +44,30 @@ def get_org_reports(org_id: str):
     if not store.get_org(org_id):
         raise HTTPException(404, f"Unknown org: {org_id}")
     return store.list_reports(org_id)
+
+
+# --------------------------------------------------------------------------
+# portal — one link per client, every published report behind it
+# --------------------------------------------------------------------------
+
+@router.get("/portal/{org_id}", response_model=Portal, tags=["portal"])
+def get_portal(org_id: str, k: str | None = Query(default=None)):
+    """Public read with the client's portal key. Lists published reports only
+    — drafts and retracted reports are the author's business. Each entry
+    carries its own share key so the reader can open it; that is the grant
+    the portal key stands for."""
+    org = store.get_org(org_id)
+    actual = store.get_org_key(org_id) if org else None
+    if not org or not check_share_key(k, actual):
+        raise HTTPException(404, "Unknown client or bad key.")
+    reports: list[PortalReport] = []
+    for stub in store.list_reports(org_id):
+        if stub.status != "published":
+            continue
+        rep = store.get_report(stub.id)
+        if rep and rep.share_key:
+            reports.append(PortalReport(**stub.model_dump(), share_key=rep.share_key))
+    return Portal(org=org, reports=reports)
 
 
 # --------------------------------------------------------------------------
@@ -165,6 +190,42 @@ def set_status(report_id: str, new_status: str):
         raise HTTPException(400, f"Bad status: {new_status}")
     rep.status = new_status  # type: ignore[assignment]
     return store.put_report(rep)
+
+
+@router.get(
+    "/studio/orgs",
+    response_model=list[StudioOrg],
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_orgs_as_author():
+    """Orgs with their portal keys. Orgs created before the portal existed
+    get a key minted on first read."""
+    out = []
+    for o in store.list_orgs():
+        key = store.get_org_key(o.id)
+        if not key:
+            key = new_share_key()
+            store.set_org_key(o.id, key)
+        out.append(StudioOrg(**o.model_dump(), share_key=key))
+    return out
+
+
+@router.post(
+    "/studio/orgs/{org_id}/rotate-key",
+    response_model=StudioOrg,
+    tags=["studio"],
+    dependencies=[author],
+)
+def rotate_org_key(org_id: str):
+    """Invalidate the client's portal link. Individual report links keep
+    working — rotate those separately if they need to die too."""
+    org = store.get_org(org_id)
+    if not org:
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    key = new_share_key()
+    store.set_org_key(org_id, key)
+    return StudioOrg(**org.model_dump(), share_key=key)
 
 
 @router.post(

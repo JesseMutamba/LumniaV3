@@ -9,16 +9,18 @@ opens it on a phone with no account.
 
 The platform ships empty. It holds only what you publish.
 
-## Two surfaces
+## Three surfaces
 
 | | Who | Where | Needs |
 |---|---|---|---|
 | **Studio** | you | `#/studio` | the author token |
+| **Portal** | your client | `#/c/<org>?k=<key>` | the portal link |
 | **Viewer** | your stakeholder | `#/r/<id>?k=<key>` | the link |
 
 A reader cannot reach Studio, cannot list clients, and cannot open a report
-they don't hold a key for. There is no navigation out of a report because
-there is nowhere for them to go.
+they don't hold a key for. A portal key is scoped to one client: it lists
+that client's published reports and nothing else. There is no navigation out
+of a report because there is nowhere for them to go.
 
 ## Layout
 
