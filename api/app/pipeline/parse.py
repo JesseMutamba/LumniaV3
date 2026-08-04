@@ -19,6 +19,8 @@ from datetime import date
 
 from ..schema import (
     Column,
+    Context,
+    ContextIn,
     Heading,
     Ledger,
     Prose,
@@ -157,10 +159,18 @@ def _width(sheet: Sheet) -> int:
     return max((len(r) for r in sheet.grid), default=0)
 
 
-def detect_tables(wb: Workbook) -> list[DetectedTable]:
-    """Every table worth showing an author, biggest first, capped."""
+def _norm(s: str) -> str:
+    return s.strip().casefold()
+
+
+def detect_tables(wb: Workbook, ctx: ContextIn | None = None) -> list[DetectedTable]:
+    """Every table worth showing an author, biggest first, capped. The client
+    context prunes first: a sheet the context says to ignore is never read."""
+    ignored = {_norm(s) for s in (ctx.ignore_sheets if ctx else [])}
     found: list[DetectedTable] = []
     for sheet in wb.sheets.values():
+        if _norm(sheet.name) in ignored:
+            continue
         for r0, r1 in _blocks(sheet):
             t = _detect_in_block(sheet, r0, r1)
             if t:
@@ -182,7 +192,11 @@ def _slug(s: str) -> str:
     return s[:40] or "classeur"
 
 
-def _unit_for(label: str) -> str:
+def _unit_for(label: str, ctx: ContextIn | None = None) -> str:
+    if ctx:
+        for header, unit in ctx.units.items():
+            if _norm(header) == _norm(label):
+                return unit
     up = label.upper()
     if "USD" in up or "$" in label:
         return "USD"
@@ -193,20 +207,27 @@ def _unit_for(label: str) -> str:
     return "none"
 
 
-def _table_block(wb: Workbook, t: DetectedTable) -> Table:
+def _table_block(
+    wb: Workbook, t: DetectedTable, ctx: ContextIn | None = None
+) -> tuple[Table, int]:
+    """The block plus how many rows the context excluded."""
     sheet = wb[t.sheet]
+    aliases = {_norm(k): v for k, v in (ctx.aliases if ctx else {}).items()}
+    excluded_labels = {_norm(x) for x in (ctx.exclude_labels if ctx else [])}
     columns = [
         Column(
             key=f"c{c.index}",
             label=Text(fr=c.label),
             align="left" if c.kind == "text" else "right",
-            money=_unit_for(c.label) in ("USD", "CDF"),
+            money=_unit_for(c.label, ctx) in ("USD", "CDF"),
         )
         for c in t.columns
     ]
     rows: list[dict] = []
+    excluded = 0
     for r in range(t.first_row, min(t.last_row, t.first_row + MAX_ROWS - 1) + 1):
         row: dict = {}
+        skip = False
         for c in t.columns:
             v = sheet.cell(r, c.index)
             if v is None:
@@ -214,21 +235,34 @@ def _table_block(wb: Workbook, t: DetectedTable) -> Table:
             if c.kind == "number" and _is_num(v):
                 row[f"c{c.index}"] = Value(
                     n=float(v),
-                    unit=_unit_for(c.label),
+                    unit=_unit_for(c.label, ctx),
                     src=Src(file=wb.source.idx, sheet=t.sheet, cells=a1(r, c.index)),
                 )
             else:
-                row[f"c{c.index}"] = str(v)
+                label = str(v)
+                if _norm(label) in excluded_labels:
+                    skip = True
+                    break
+                row[f"c{c.index}"] = aliases.get(_norm(label), label)
+        if skip:
+            excluded += 1
+            continue
         if row:
             rows.append(row)
-    return Table(columns=columns, rows=rows)
+    return Table(columns=columns, rows=rows), excluded
 
 
-def build_draft(wb: Workbook, tables: list[DetectedTable], org_id: str) -> Report:
+def build_draft(
+    wb: Workbook,
+    tables: list[DetectedTable],
+    org_id: str,
+    ctx: Context | ContextIn | None = None,
+) -> Report:
     """A reviewable draft. Every number carries its cell; nothing is guessed."""
     today = date.today()
     name = wb.source.filename
     truncated = [t for t in tables if t.n_rows > MAX_ROWS]
+    ctx_version = getattr(ctx, "version", None)
 
     blocks: list = [
         Heading(
@@ -247,10 +281,22 @@ def build_draft(wb: Workbook, tables: list[DetectedTable], org_id: str) -> Repor
             ),
         )
     ]
+    if ctx_version:
+        blocks.append(
+            Prose(
+                text=Text(
+                    fr=f"Contexte client v{ctx_version} appliqué.",
+                    en=f"Client context v{ctx_version} applied.",
+                )
+            )
+        )
     for t in tables:
+        table, excluded = _table_block(wb, t, ctx)
         pieces = [f"confiance {int(t.confidence * 100)} %", t.cells]
         if t.n_rows > MAX_ROWS:
             pieces.append(f"{t.n_rows - MAX_ROWS} ligne(s) tronquée(s)")
+        if excluded:
+            pieces.append(f"{excluded} ligne(s) exclue(s) par le contexte")
         pieces += t.notes
         blocks.append(
             Heading(
@@ -260,7 +306,7 @@ def build_draft(wb: Workbook, tables: list[DetectedTable], org_id: str) -> Repor
                 dek=Text(fr=" · ".join(pieces)),
             )
         )
-        blocks.append(_table_block(wb, t))
+        blocks.append(table)
     if truncated:
         blocks.append(
             Prose(

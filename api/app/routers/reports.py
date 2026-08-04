@@ -9,7 +9,18 @@ from pydantic import ValidationError
 from .. import store
 from ..auth import check_share_key, new_share_key, require_author
 from ..pipeline.checks import check_provenance
-from ..schema import Org, OrgIn, Portal, PortalReport, Report, ReportStub, StudioOrg
+from ..schema import (
+    Context,
+    ContextIn,
+    ContextVersion,
+    Org,
+    OrgIn,
+    Portal,
+    PortalReport,
+    Report,
+    ReportStub,
+    StudioOrg,
+)
 
 router = APIRouter()
 author = Depends(require_author)
@@ -226,6 +237,45 @@ def rotate_org_key(org_id: str):
     key = new_share_key()
     store.set_org_key(org_id, key)
     return StudioOrg(**org.model_dump(), share_key=key)
+
+
+@router.get(
+    "/studio/orgs/{org_id}/context",
+    response_model=Context | None,
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_org_context(org_id: str):
+    """The client's current parsing knowledge, or null before the first save."""
+    if not store.get_org(org_id):
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    return store.get_context(org_id)
+
+
+@router.put(
+    "/studio/orgs/{org_id}/context",
+    response_model=Context,
+    tags=["studio"],
+    dependencies=[author],
+)
+def save_org_context(org_id: str, body: ContextIn):
+    """Append a new version. Never overwrites — a definition change stays
+    visible, and reverting is saving an old document again."""
+    if not store.get_org(org_id):
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    return store.put_context(org_id, body)
+
+
+@router.get(
+    "/studio/orgs/{org_id}/context/versions",
+    response_model=list[ContextVersion],
+    tags=["studio"],
+    dependencies=[author],
+)
+def get_org_context_versions(org_id: str):
+    if not store.get_org(org_id):
+        raise HTTPException(404, f"Unknown org: {org_id}")
+    return store.list_context_versions(org_id)
 
 
 @router.post(

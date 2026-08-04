@@ -296,3 +296,64 @@ def test_parse_confidence_drops_on_sparse_data(client, auth):
         ]
     }).json()["tables"][0]["confidence"]
     assert sparse < dense
+
+
+# ------------------------------------------------------- context model ---
+
+CTX = {
+    "ignore_sheets": ["notes"],
+    "units": {"Budget USD": "USD", "Tonnes": "t"},
+    "aliases": {"MO": "Main d'œuvre"},
+    "exclude_labels": ["TOTAL"],
+}
+
+
+def test_context_versions_append(client, auth, org):
+    assert client.get(f"/v1/studio/orgs/{org}/context", headers=auth).json() is None
+    v1 = client.put(f"/v1/studio/orgs/{org}/context", json=CTX, headers=auth).json()
+    assert v1["version"] == 1 and v1["units"]["Budget USD"] == "USD"
+    v2 = client.put(f"/v1/studio/orgs/{org}/context", json={**CTX, "exclude_labels": []}, headers=auth).json()
+    assert v2["version"] == 2
+    latest = client.get(f"/v1/studio/orgs/{org}/context", headers=auth).json()
+    assert latest["version"] == 2 and latest["exclude_labels"] == []
+    versions = client.get(f"/v1/studio/orgs/{org}/context/versions", headers=auth).json()
+    assert [v["version"] for v in versions] == [2, 1]
+
+
+def test_context_rejects_unknown_fields_and_units(client, auth, org):
+    assert client.put(f"/v1/studio/orgs/{org}/context",
+                      json={"formulas": {}}, headers=auth).status_code == 422
+    assert client.put(f"/v1/studio/orgs/{org}/context",
+                      json={"units": {"X": "EUR"}}, headers=auth).status_code == 422
+    assert client.put("/v1/studio/orgs/ghost/context", json=CTX, headers=auth).status_code == 404
+
+
+def test_ingest_applies_the_context(client, auth):
+    client.post("/v1/orgs", json={"id": "ctxco", "name": "CtxCo", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/ctxco/context", json=CTX, headers=auth)
+    body = _ingest(client, auth, {
+        "budget": [
+            ["Poste", "Budget USD", "Tonnes"],
+            ["Semences", 12000, 3],
+            ["MO", 15000, 0],
+            ["TOTAL", 27000, 3],
+        ],
+        "notes": [
+            ["Poste", "Montant"],
+            ["a", 1], ["b", 2], ["c", 3],
+        ],
+    }, org="ctxco").json()
+
+    # the ignored sheet was never parsed
+    assert [t["sheet"] for t in body["tables"]] == ["budget"]
+
+    draft = body["draft"]
+    assert any("Contexte client v1" in b.get("text", {}).get("fr", "")
+               for b in draft["blocks"] if b["type"] == "prose")
+    table = next(b for b in draft["blocks"] if b["type"] == "table")
+    labels = [r["c1"] for r in table["rows"]]
+    assert "Main d'œuvre" in labels        # alias applied
+    assert "TOTAL" not in labels           # derived row excluded
+    tonnes = table["rows"][0]["c3"]
+    assert tonnes["unit"] == "t"           # unit override from context

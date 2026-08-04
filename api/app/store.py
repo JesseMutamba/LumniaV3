@@ -11,7 +11,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from .schema import Org, Report, ReportStub, Text
+from .schema import Context, ContextIn, ContextVersion, Org, Report, ReportStub, Text
 
 # LUMNIA_DB lets a container point this at a mounted volume so reports
 # survive a redeploy. Local development falls back to a file in api/.
@@ -32,6 +32,13 @@ CREATE TABLE IF NOT EXISTS reports (
   doc          TEXT NOT NULL   -- json Report
 );
 CREATE INDEX IF NOT EXISTS reports_org ON reports(org);
+CREATE TABLE IF NOT EXISTS contexts (
+  org        TEXT NOT NULL REFERENCES orgs(id),
+  version    INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  doc        TEXT NOT NULL,    -- json ContextIn
+  PRIMARY KEY (org, version)
+);
 """
 
 
@@ -99,6 +106,51 @@ def get_org_key(org_id: str) -> str | None:
 def set_org_key(org_id: str, key: str) -> None:
     with connect() as con:
         con.execute("UPDATE orgs SET share_key = ? WHERE id = ?", (key, org_id))
+
+
+# --------------------------------------------------------------------------
+# contexts — append-only. A definition change is a new version, never an
+# overwrite, so what the parser knew last month stays answerable.
+# --------------------------------------------------------------------------
+
+def put_context(org_id: str, doc: ContextIn) -> Context:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    with connect() as con:
+        row = con.execute(
+            "SELECT COALESCE(MAX(version), 0) AS v FROM contexts WHERE org = ?",
+            (org_id,),
+        ).fetchone()
+        version = row["v"] + 1
+        con.execute(
+            "INSERT INTO contexts (org, version, created_at, doc) VALUES (?,?,?,?)",
+            (org_id, version, now.isoformat(), doc.model_dump_json()),
+        )
+    return Context(**doc.model_dump(), version=version, updated_at=now)
+
+
+def get_context(org_id: str) -> Context | None:
+    with connect() as con:
+        row = con.execute(
+            "SELECT version, created_at, doc FROM contexts "
+            "WHERE org = ? ORDER BY version DESC LIMIT 1",
+            (org_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return Context(
+        **json.loads(row["doc"]), version=row["version"], updated_at=row["created_at"]
+    )
+
+
+def list_context_versions(org_id: str) -> list[ContextVersion]:
+    with connect() as con:
+        rows = con.execute(
+            "SELECT version, created_at FROM contexts WHERE org = ? ORDER BY version DESC",
+            (org_id,),
+        ).fetchall()
+    return [ContextVersion(version=r["version"], updated_at=r["created_at"]) for r in rows]
 
 
 # --------------------------------------------------------------------------

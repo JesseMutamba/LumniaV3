@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
+from .. import store
 from ..pipeline.checks import detect_rollup_hierarchy
 from ..pipeline.ingest import read_workbook
 from ..pipeline.parse import build_draft, detect_tables
@@ -131,9 +132,12 @@ async def ingest(file: UploadFile = File(...), org: str = Query(default="client"
     wb.source.checks_run = len(checks)
     wb.source.checks_passed = sum(c.passed for c in checks)
 
-    # Layer 02: detect tables, build the reviewable draft.
-    detected = detect_tables(wb)
-    draft = build_draft(wb, detected, org) if detected else None
+    # Layer 02: detect tables, build the reviewable draft. The client's
+    # context (latest version) shapes both — ignored sheets are never read,
+    # units and aliases come from what this client's books actually mean.
+    ctx = store.get_context(org)
+    detected = detect_tables(wb, ctx)
+    draft = build_draft(wb, detected, org, ctx) if detected else None
 
     return Inventory(
         source=wb.source,

@@ -19,6 +19,10 @@ export default function Studio({ locale, onPublished }) {
   const [copied, setCopied] = useState(false)
   const [copiedOrg, setCopiedOrg] = useState(null)
   const [inv, setInv] = useState(null)
+  const [ctxOrg, setCtxOrg] = useState(null)
+  const [ctxText, setCtxText] = useState('')
+  const [ctxMeta, setCtxMeta] = useState(null)
+  const [ctxErr, setCtxErr] = useState(null)
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
   const L = locale === 'fr'
@@ -80,6 +84,45 @@ export default function Studio({ locale, onPublished }) {
     if (!f) return
     const r = await run(() => api.ingestWorkbook(f, orgs[0]?.id))
     if (r) setInv(r)
+  }
+
+  const CTX_TEMPLATE = {
+    ignore_sheets: [],
+    units: {},
+    aliases: {},
+    exclude_labels: [],
+  }
+  const editable = (c) => {
+    const { version, updated_at, ...doc } = c
+    return doc
+  }
+
+  async function openContext(o) {
+    if (ctxOrg === o.id) {
+      setCtxOrg(null)
+      return
+    }
+    setCtxOrg(o.id)
+    setCtxErr(null)
+    const c = await run(() => api.getOrgContext(o.id))
+    setCtxMeta(c ? { version: c.version, updated_at: c.updated_at } : null)
+    setCtxText(JSON.stringify(c ? editable(c) : CTX_TEMPLATE, null, 2))
+  }
+
+  async function saveContext() {
+    setCtxErr(null)
+    let body
+    try {
+      body = JSON.parse(ctxText)
+    } catch (e) {
+      setCtxErr(L ? `JSON invalide : ${e.message}` : `Invalid JSON: ${e.message}`)
+      return
+    }
+    const c = await run(() => api.saveOrgContext(ctxOrg, body))
+    if (c) {
+      setCtxMeta({ version: c.version, updated_at: c.updated_at })
+      setCtxText(JSON.stringify(editable(c), null, 2))
+    }
   }
 
   function downloadDraft() {
@@ -285,8 +328,45 @@ export default function Studio({ locale, onPublished }) {
                     ? L ? 'copié' : 'copied'
                     : L ? 'lien portail' : 'portal link'}
                 </button>
+                <button className="link" onClick={() => openContext(o)}>
+                  {ctxOrg === o.id ? (L ? 'fermer' : 'close') : (L ? 'contexte' : 'context')}
+                </button>
               </div>
             ))}
+          </div>
+        )}
+        {ctxOrg && (
+          <div className="ctx">
+            <div className="ctx-h">
+              <span>
+                {L ? 'contexte' : 'context'} · {ctxOrg}
+              </span>
+              <span className="ctx-v">
+                {ctxMeta
+                  ? `v${ctxMeta.version} · ${String(ctxMeta.updated_at).slice(0, 10)}`
+                  : L
+                    ? 'aucun — v1 à la première sauvegarde'
+                    : 'none — v1 on first save'}
+              </span>
+            </div>
+            <textarea
+              className="ctx-t"
+              value={ctxText}
+              onChange={(e) => setCtxText(e.target.value)}
+              spellCheck={false}
+              rows={10}
+            />
+            <p className="hint">
+              {L
+                ? 'ignore_sheets : feuilles jamais lues · units : en-tête → unité (USD, CDF, t, ha, pct…) · aliases : libellé → libellé canonique · exclude_labels : lignes de totaux à écarter. Chaque sauvegarde crée une version — rien ne s’écrase.'
+                : 'ignore_sheets: sheets never read · units: header → unit (USD, CDF, t, ha, pct…) · aliases: label → canonical label · exclude_labels: total rows to drop. Every save creates a version — nothing is overwritten.'}
+            </p>
+            {ctxErr && <div className="note">{ctxErr}</div>}
+            <div className="row-actions">
+              <button className="gold-btn" onClick={saveContext} disabled={busy}>
+                {L ? 'sauvegarder' : 'save'}
+              </button>
+            </div>
           </div>
         )}
         <form className="org-form" onSubmit={addOrg}>

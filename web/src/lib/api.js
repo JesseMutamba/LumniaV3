@@ -52,6 +52,9 @@ export const createOrg = (org) => req('/orgs', { method: 'POST', body: org, auth
 export const listStudioOrgs = () => req('/studio/orgs', { auth: true })
 export const rotateOrgKey = (id) =>
   req(`/studio/orgs/${id}/rotate-key`, { method: 'POST', auth: true })
+export const getOrgContext = (id) => req(`/studio/orgs/${id}/context`, { auth: true })
+export const saveOrgContext = (id, body) =>
+  req(`/studio/orgs/${id}/context`, { method: 'PUT', body, auth: true })
 export const getReportAsAuthor = (id) => req(`/studio/reports/${id}`, { auth: true })
 export const setStatus = (id, s) =>
   req(`/studio/reports/${id}/status?new_status=${s}`, { method: 'PATCH', auth: true })

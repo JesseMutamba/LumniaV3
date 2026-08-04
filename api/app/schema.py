@@ -250,6 +250,36 @@ class Org(BaseModel):
     report_count: int = 0
 
 
+class ContextIn(BaseModel):
+    """What the author saves: the client's parsing knowledge.
+
+    This is the context model — everything Lumnia knows about how *this*
+    client keeps their books that a generic parser cannot guess. It shapes
+    layer 02: which sheets to skip, what unit a header means, which labels
+    are the same thing spelled twice, which rows are derived totals that
+    would double-count if extracted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    ignore_sheets: list[str] = []
+    units: dict[str, Unit] = {}          # header text -> unit, exact match wins
+    aliases: dict[str, str] = {}         # label as written -> canonical label
+    exclude_labels: list[str] = []       # rows whose label matches are dropped
+
+
+class Context(ContextIn):
+    """A saved version. Definitions change; every change stays visible."""
+
+    version: int
+    updated_at: datetime
+
+
+class ContextVersion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: int
+    updated_at: datetime
+
+
 class StudioOrg(Org):
     """Org plus its portal key — appears only in author-authenticated
     responses, never on a public endpoint."""
