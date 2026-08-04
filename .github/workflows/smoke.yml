@@ -33,9 +33,11 @@ jobs:
           grep -qi "lumnia" page.html
           echo "asset bundle served:"
           grep -o 'assets/index-[^"]*\.js' page.html | head -1
+      - uses: actions/checkout@v4
       - name: Every analysis this repo defines is live
         env:
           TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
         run: |
           # "Deployed" means the running service can do what the code says,
           # not that a push succeeded. Compare the live registry against the
