@@ -37,9 +37,13 @@ jobs:
           # starting with # are comments, so a request can explain itself.
           retract="${{ inputs.retract }}"
           orgs="${{ inputs.delete_orgs }}"
+          # Written as if-blocks, not `[ -z "$x" ] && x=...`: this step runs
+          # under `bash -e`, where a && list whose test fails aborts the step.
+          # That form would have killed the very case dispatch inputs exist for.
+          field() { grep -v '^#' tidy-request.txt | grep "^$1:" | cut -d: -f2- | tr -d ' ' || true; }
           if [ -f tidy-request.txt ]; then
-            [ -z "$retract" ] && retract=$(grep -v '^#' tidy-request.txt | grep '^retract:' | cut -d: -f2- | tr -d ' ' || true)
-            [ -z "$orgs" ] && orgs=$(grep -v '^#' tidy-request.txt | grep '^delete_orgs:' | cut -d: -f2- | tr -d ' ' || true)
+            if [ -z "$retract" ]; then retract=$(field retract); fi
+            if [ -z "$orgs" ]; then orgs=$(field delete_orgs); fi
           fi
           echo "retract=$retract" >> "$GITHUB_OUTPUT"
           echo "delete_orgs=$orgs" >> "$GITHUB_OUTPUT"
