@@ -6,7 +6,14 @@
 # targets explicitly, and it prints what it did.
 name: Tidy the live service
 
+# Driven by a checked-in request file rather than dispatch inputs: the
+# request is then part of the history, so what was withdrawn and when is
+# answerable later without reading Actions logs.
 on:
+  push:
+    paths:
+      - "tidy-request.txt"
+      - ".github/workflows/tidy.yml"
   workflow_dispatch:
     inputs:
       retract:
@@ -22,12 +29,29 @@ jobs:
   tidy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Read the request
+        id: req
+        run: |
+          # Dispatch inputs win when present; otherwise read the file. Lines
+          # starting with # are comments, so a request can explain itself.
+          retract="${{ inputs.retract }}"
+          orgs="${{ inputs.delete_orgs }}"
+          if [ -f tidy-request.txt ]; then
+            [ -z "$retract" ] && retract=$(grep -v '^#' tidy-request.txt | grep '^retract:' | cut -d: -f2- | tr -d ' ' || true)
+            [ -z "$orgs" ] && orgs=$(grep -v '^#' tidy-request.txt | grep '^delete_orgs:' | cut -d: -f2- | tr -d ' ' || true)
+          fi
+          echo "retract=$retract" >> "$GITHUB_OUTPUT"
+          echo "delete_orgs=$orgs" >> "$GITHUB_OUTPUT"
+          echo "retract: ${retract:-(none)}"
+          echo "delete_orgs: ${orgs:-(none)}"
+
       - name: Retract superseded reports
-        if: inputs.retract != ''
+        if: steps.req.outputs.retract != ''
         env:
           TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
           API: https://lumnia-api-lkfg.onrender.com/v1
-          IDS: ${{ inputs.retract }}
+          IDS: ${{ steps.req.outputs.retract }}
         run: |
           # Retracted, not deleted: the link keeps resolving and tells the
           # reader a figure was wrong, which is the whole point of the rule.
@@ -40,11 +64,11 @@ jobs:
           done
 
       - name: Delete empty clients
-        if: inputs.delete_orgs != ''
+        if: steps.req.outputs.delete_orgs != ''
         env:
           TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
           API: https://lumnia-api-lkfg.onrender.com/v1
-          IDS: ${{ inputs.delete_orgs }}
+          IDS: ${{ steps.req.outputs.delete_orgs }}
         run: |
           # 409 here is the API refusing to orphan a link somebody holds.
           # That is a correct answer, so surface it rather than swallow it.
