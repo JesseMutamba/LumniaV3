@@ -18,6 +18,7 @@ export default function Studio({ locale, onPublished }) {
   const [result, setResult] = useState(null)
   const [copied, setCopied] = useState(false)
   const [copiedOrg, setCopiedOrg] = useState(null)
+  const [inv, setInv] = useState(null)
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
   const L = locale === 'fr'
@@ -73,6 +74,25 @@ export default function Studio({ locale, onPublished }) {
     }
   }
 
+  async function analyse(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    const r = await run(() => api.ingestWorkbook(f, orgs[0]?.id))
+    if (r) setInv(r)
+  }
+
+  function downloadDraft() {
+    const blob = new Blob([JSON.stringify(inv.draft, null, 2)], {
+      type: 'application/json',
+    })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `${inv.draft.id}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   async function rotate() {
     const rep = await run(() => api.rotateKey(result.id))
     if (rep) {
@@ -115,10 +135,68 @@ export default function Studio({ locale, onPublished }) {
         </button>
       </div>
 
+      {/* ---------------------------------------------------------- analyse */}
+      <section className="panel">
+        <div className="panel-h">
+          {L ? '01 · Analyser un classeur' : '01 · Analyse a workbook'}
+        </div>
+        <p>
+          {L
+            ? 'Déposez un classeur (.xlsx). La machine détecte les tableaux, écrit un brouillon de rapport où chaque valeur porte déjà sa cellule source, et vous le rend pour relecture.'
+            : 'Drop a workbook (.xlsx). The machine detects the tables, writes a draft report in which every value already carries its source cell, and hands it back for review.'}
+        </p>
+        <label className="drop">
+          <input type="file" accept=".xlsx,.xlsm" onChange={analyse} hidden />
+          {busy
+            ? L ? 'Analyse…' : 'Analysing…'
+            : L ? 'Choisir un classeur .xlsx' : 'Choose an .xlsx workbook'}
+        </label>
+        {inv && (
+          <div className="det">
+            {inv.tables.map((t, i) => (
+              <div className="det-row" key={i}>
+                <span className="det-loc">
+                  {t.sheet}!{t.cells}
+                </span>
+                <span className="det-dim">
+                  {t.rows}×{t.cols}
+                  {t.notes.length > 0 && ` · ${t.notes.join(' · ')}`}
+                </span>
+                <span
+                  className="det-conf"
+                  data-band={t.confidence >= 0.8 ? 'high' : t.confidence >= 0.5 ? 'mid' : 'low'}
+                >
+                  {Math.round(t.confidence * 100)} %
+                </span>
+              </div>
+            ))}
+            {inv.tables.length === 0 && (
+              <div className="note">
+                {L
+                  ? 'Aucun tableau détecté — le classeur est peut-être vide ou jamais recalculé par Excel.'
+                  : 'No tables detected — the workbook may be empty or never recalculated by Excel.'}
+              </div>
+            )}
+            {inv.draft && (
+              <>
+                <button className="drop det-dl" onClick={downloadDraft}>
+                  {L ? 'télécharger le brouillon .json' : 'download the draft .json'}
+                </button>
+                <p className="fine">
+                  {L
+                    ? 'Relisez le brouillon — intitulés, unités, lignes — puis publiez-le au panneau 02.'
+                    : 'Review the draft — labels, units, rows — then publish it in panel 02.'}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* ---------------------------------------------------------- publish */}
       <section className="panel">
         <div className="panel-h">
-          {L ? '01 · Publier un rapport' : '01 · Publish a report'}
+          {L ? '02 · Publier un rapport' : '02 · Publish a report'}
         </div>
         <p>
           {L
@@ -155,7 +233,7 @@ export default function Studio({ locale, onPublished }) {
       {/* ------------------------------------------------------------ share */}
       {result && (
         <section className="panel ok">
-          <div className="panel-h">{L ? '02 · Lien à partager' : '02 · Share link'}</div>
+          <div className="panel-h">{L ? '03 · Lien à partager' : '03 · Share link'}</div>
           <div className="pub-title">
             {t(result.title, locale)} · {t(result.period.label, locale)} ·{' '}
             <span className="mono">{result.status}</span>
@@ -185,7 +263,7 @@ export default function Studio({ locale, onPublished }) {
 
       {/* ----------------------------------------------------------- clients */}
       <section className="panel">
-        <div className="panel-h">{L ? '03 · Clients' : '03 · Clients'}</div>
+        <div className="panel-h">{L ? '04 · Clients' : '04 · Clients'}</div>
         {orgs.length > 0 && (
           <div className="org-list">
             {orgs.map((o) => (

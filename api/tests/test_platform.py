@@ -217,3 +217,82 @@ def test_public_org_list_never_leaks_keys(client):
 
 def test_studio_org_list_requires_the_token(client):
     assert client.get("/v1/studio/orgs").status_code == 401
+
+
+# --------------------------------------------------------- parse layer ---
+
+def _xlsx(sheets: dict) -> bytes:
+    """Build a workbook in memory: {sheet: [[row], ...]}."""
+    from openpyxl import Workbook as XlsxWorkbook
+    wb = XlsxWorkbook()
+    wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for row in rows:
+            ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+BUDGET_SHEET = {
+    "budget": [
+        ["Poste", "Budget USD", "Réel USD"],
+        ["Semences", 12000, 9500],
+        ["Engrais", 8000, 8100],
+        ["Transport", 5000, 2200],
+        ["Main d'œuvre", 15000, 14000],
+    ]
+}
+
+
+def _ingest(client, auth, sheets, org="acme"):
+    return client.post(
+        f"/v1/studio/ingest?org={org}",
+        files={"file": ("test.xlsx", io.BytesIO(_xlsx(sheets)), "application/x")},
+        headers=auth,
+    )
+
+
+def test_parse_detects_a_table_and_builds_a_draft(client, auth):
+    body = _ingest(client, auth, BUDGET_SHEET).json()
+    assert len(body["tables"]) == 1
+    t = body["tables"][0]
+    assert t["sheet"] == "budget" and t["cells"] == "A1:C5"
+    assert t["rows"] == 4 and t["cols"] == 3
+    assert 0 < t["confidence"] <= 1
+
+    draft = body["draft"]
+    assert draft["status"] == "draft" and draft["org"] == "acme"
+    table = next(b for b in draft["blocks"] if b["type"] == "table")
+    # every extracted number carries the exact cell it came from
+    first = table["rows"][0]
+    assert first["c1"] == "Semences"
+    assert first["c2"]["n"] == 12000 and first["c2"]["src"]["cells"] == "B2"
+    assert first["c2"]["unit"] == "USD"  # inferred from the header
+    assert first["c3"]["src"] == {"file": 0, "sheet": "budget", "cells": "C2"}
+
+
+def test_machine_draft_is_publishable_as_is(client, auth, org):
+    draft = _ingest(client, auth, BUDGET_SHEET, org=org).json()["draft"]
+    r = client.post(f"/v1/orgs/{org}/reports", json=draft, headers=auth)
+    assert r.status_code == 201  # CH-004 has nothing to refuse: every value is sourced
+
+
+def test_parse_skips_prose_only_sheets(client, auth):
+    body = _ingest(client, auth, {"notes": [["Compte rendu"], ["Réunion du 3 août"], ["Présents: A, B"]]}).json()
+    assert body["tables"] == [] and body["draft"] is None
+
+
+def test_parse_confidence_drops_on_sparse_data(client, auth):
+    dense = _ingest(client, auth, BUDGET_SHEET).json()["tables"][0]["confidence"]
+    sparse = _ingest(client, auth, {
+        "s": [
+            ["Poste", "Budget", "Réel", "Écart"],
+            ["A", 1, None, None],
+            ["B", None, 2, None],
+            ["C", None, None, None],
+            ["D", 4, None, None],
+        ]
+    }).json()["tables"][0]["confidence"]
+    assert sparse < dense

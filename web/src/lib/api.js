@@ -66,10 +66,15 @@ export function importReport(file) {
   return req('/studio/import', { method: 'POST', body: fd, auth: true, raw: true })
 }
 
-export function ingestWorkbook(file) {
+export function ingestWorkbook(file, orgId) {
   const fd = new FormData()
   fd.append('file', file)
-  return req('/studio/ingest', { method: 'POST', body: fd, auth: true, raw: true })
+  return req(`/studio/ingest?org=${encodeURIComponent(orgId || 'client')}`, {
+    method: 'POST',
+    body: fd,
+    auth: true,
+    raw: true,
+  })
 }
 
 /** Share URL for a stakeholder. Same origin as whatever they're reading. */

@@ -1,22 +1,24 @@
 """Layer 01/02 boundary.
 
-Upload returns an inventory and a check run — not a report. Turning an
-inventory into a report is layer 02 (parse & normalize) and layer 02 is
-where the honest gap is: today a person picks the ranges. This endpoint is
-built so that when confidence-scored parsing lands, it slots in here and
-nothing above it changes.
+Upload returns an inventory, a check run, and — since layer 02 landed — a
+confidence-scored *draft report*: every table the parser could find, every
+extracted value already carrying its source cell. The draft is returned,
+not stored; the author reviews it, edits the document, and publishes it
+through the normal flow. The machine writes the first draft, the author
+signs it.
 """
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ..pipeline.checks import detect_rollup_hierarchy
 from ..pipeline.ingest import read_workbook
-from ..schema import Source
+from ..pipeline.parse import build_draft, detect_tables
+from ..schema import Report, Source
 
 router = APIRouter()
 
@@ -40,11 +42,22 @@ class CheckReport(BaseModel):
     data: dict = {}
 
 
+class TableInfo(BaseModel):
+    sheet: str
+    cells: str
+    rows: int
+    cols: int
+    confidence: float
+    notes: list[str] = []
+
+
 class Inventory(BaseModel):
     source: Source
     sheets: list[SheetInfo]
     checks: list[CheckReport]
     needs_review: bool
+    tables: list[TableInfo] = []
+    draft: Report | None = None
 
 
 @router.post(
@@ -53,7 +66,7 @@ class Inventory(BaseModel):
     tags=["studio"],
     dependencies=[author],
 )
-async def ingest(file: UploadFile = File(...)):
+async def ingest(file: UploadFile = File(...), org: str = Query(default="client")):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED:
         raise HTTPException(415, f"Unsupported type '{ext}'. Accepts: {sorted(ALLOWED)}")
@@ -118,9 +131,25 @@ async def ingest(file: UploadFile = File(...)):
     wb.source.checks_run = len(checks)
     wb.source.checks_passed = sum(c.passed for c in checks)
 
+    # Layer 02: detect tables, build the reviewable draft.
+    detected = detect_tables(wb)
+    draft = build_draft(wb, detected, org) if detected else None
+
     return Inventory(
         source=wb.source,
         sheets=sheets,
         checks=checks,
         needs_review=any(not c.passed for c in checks),
+        tables=[
+            TableInfo(
+                sheet=t.sheet,
+                cells=t.cells,
+                rows=t.n_rows,
+                cols=len(t.columns),
+                confidence=t.confidence,
+                notes=t.notes,
+            )
+            for t in detected
+        ],
+        draft=draft,
     )

@@ -102,9 +102,13 @@ ahead of the client.
 
 ## Known gaps
 
-- **Layer 02 (parse & normalize) does not exist.** Turning a workbook into a
-  report document is manual. `api/examples/pvak_adapter.py` shows what that
-  currently looks like, and is what confidence-scored parsing has to replace.
+- **Layer 02 (parse & normalize) is a first slice.** `POST /v1/studio/ingest`
+  detects tables with confidence scores and returns a reviewable draft report
+  in which every value carries its source cell. Header inference and column
+  typing only: merged cells, multi-row headers and semantic mapping (which
+  table is *the budget*?) still need a person, and
+  `api/examples/pvak_adapter.py` remains the reference for a hand-built
+  report. The machine writes the first draft; the author signs it.
 - **Share keys are bearer tokens in a URL.** Unguessable, but a forwarded link
   is a granted read. Right trade for named stakeholders, wrong one for an
   enterprise buyer.
