@@ -55,6 +55,43 @@ jobs:
               print("NOT DEPLOYED:", missing); sys.exit(1)
           print("all analyses live:", ", ".join(sorted(live)))
           PY
+      - name: The link a stakeholder receives still opens the report
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          # The portal link is the one thing handed to a client, so it is the
+          # one thing worth checking end to end: fetch it exactly as a reader
+          # would, with only the key, and assert a published report comes back.
+          # Keys are masked — this log is public.
+          if [ -z "$TOKEN" ]; then echo "no token - skipping portal check"; exit 0; fi
+          curl -sS -m 30 "$API/studio/orgs" -H "Authorization: Bearer $TOKEN" -o orgs.json
+          # Every client, not just the first: an empty client sorted to the top
+          # would otherwise be the link that gets handed out.
+          python3 -c "import json;[print('::add-mask::'+o['share_key']) for o in json.load(open('orgs.json'))]"
+          n=$(python3 -c "import json;print(len(json.load(open('orgs.json'))))")
+          if [ "$n" = "0" ]; then echo "no clients yet - nothing to share"; exit 0; fi
+          for i in $(seq 0 $((n - 1))); do
+            org=$(python3 -c "import json;print(json.load(open('orgs.json'))[$i]['id'])")
+            key=$(python3 -c "import json;print(json.load(open('orgs.json'))[$i]['share_key'])")
+            code=$(curl -sS -o "portal-$i.json" -w "%{http_code}" -m 30 "$API/portal/$org?k=$key")
+            echo "portal $org -> HTTP $code"
+            test "$code" = "200"
+          done
+          python3 - <<'PY'
+          import glob, json
+          total = 0
+          for f in sorted(glob.glob("portal-*.json")):
+              p = json.load(open(f))
+              reps = p["reports"]
+              total += len(reps)
+              # Names, ids and titles are safe to print; share keys are not.
+              print(f"{p['org']['id']} ({p['org']['name']}): {len(reps)} published report(s)")
+              for r in reps:
+                  print("   -", r["id"], "|", r["title"].get("fr") or r["title"].get("en"))
+          assert total, "every portal opens, but not one published report behind any of them"
+          PY
+
       - name: The deployed build is the current one
         run: |
           # "It looks the same" is usually a stale deploy or a cached page.
