@@ -8,7 +8,6 @@ services:
   - type: web
     name: lumnia-api
     runtime: docker
-    rootDir: api
     dockerfilePath: ./Dockerfile
     plan: starter
     region: frankfurt # closest Render region to the DRC
@@ -22,7 +21,5 @@ services:
         value: "8000"
       - key: LUMNIA_DB
         value: /data/lumnia.db
-      - key: LUMNIA_ORIGINS
-        value: https://jessemutamba.github.io
       - key: LUMNIA_ADMIN_TOKEN
         generateValue: true # view it in the dashboard: lumnia-api → Environment
