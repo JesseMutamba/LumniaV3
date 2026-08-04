@@ -210,6 +210,45 @@ def test_rotating_the_portal_key_kills_the_old_link(client, auth, org):
     assert client.get(f"/v1/portal/{org}?k={new}").status_code == 200
 
 
+def _throwaway_org(client, auth, oid):
+    """These tests delete what they touch, so they cannot borrow the shared
+    session org."""
+    client.post("/v1/orgs", json={"id": oid, "name": oid, "sub": {"fr": "x"}},
+                headers=auth)
+    return oid
+
+
+def test_a_client_holding_a_report_cannot_be_deleted(client, auth):
+    """Somebody is holding that link. Deleting the client turns it into a
+    bare 404; retracting the report at least says a figure was wrong."""
+    o = _throwaway_org(client, auth, "del-held")
+    client.post(f"/v1/orgs/{o}/reports", json=doc("d-held", org=o), headers=auth)
+    assert client.delete(f"/v1/studio/orgs/{o}", headers=auth).status_code == 409
+    assert o in [x["id"] for x in client.get("/v1/orgs").json()]
+
+
+def test_an_empty_client_is_deleted_with_everything_it_held(client, auth):
+    o = _throwaway_org(client, auth, "del-empty")
+    client.put(f"/v1/studio/orgs/{o}/context", json={"units": {}}, headers=auth)
+    assert client.delete(f"/v1/studio/orgs/{o}", headers=auth).status_code == 204
+    assert o not in [x["id"] for x in client.get("/v1/orgs").json()]
+    # the context went with it, so a client re-created under the same id does
+    # not silently inherit the old one's definitions
+    _throwaway_org(client, auth, o)
+    assert client.get(f"/v1/studio/orgs/{o}/context", headers=auth).json() is None
+    client.delete(f"/v1/studio/orgs/{o}", headers=auth)
+
+
+def test_deleting_an_unknown_client_is_a_404(client, auth):
+    assert client.delete("/v1/studio/orgs/never-existed", headers=auth).status_code == 404
+
+
+def test_deleting_a_client_requires_the_token(client, auth):
+    o = _throwaway_org(client, auth, "del-auth")
+    assert client.delete(f"/v1/studio/orgs/{o}").status_code == 401
+    client.delete(f"/v1/studio/orgs/{o}", headers=auth)
+
+
 def test_public_org_list_never_leaks_keys(client):
     for o in client.get("/v1/orgs").json():
         assert "share_key" not in o

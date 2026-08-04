@@ -157,6 +157,31 @@ def set_org_key(org_id: str, key: str) -> None:
         con.execute("UPDATE orgs SET share_key = ? WHERE id = ?", (key, org_id))
 
 
+def delete_org(org_id: str) -> bool:
+    """Remove a client and everything held on its behalf.
+
+    Refuses while any report exists — a published report is a link somebody
+    holds, and deleting the client would turn it into a 404 with no
+    explanation. Retract the reports first; that at least tells the reader
+    a figure was wrong. Returns False if the client is unknown.
+
+    Everything else keyed on the org goes with it: retained workbooks are
+    the client's own financial data and have no reason to outlive them.
+    """
+    with connect() as con:
+        if not con.execute("SELECT 1 FROM orgs WHERE id = ?", (org_id,)).fetchone():
+            return False
+        n = con.execute(
+            "SELECT COUNT(*) AS n FROM reports WHERE org = ?", (org_id,)
+        ).fetchone()["n"]
+        if n:
+            raise ValueError(f"{org_id} still holds {n} report(s)")
+        for table in ("contexts", "ingestions", "tiles", "files", "runs"):
+            con.execute(f"DELETE FROM {table} WHERE org = ?", (org_id,))
+        con.execute("DELETE FROM orgs WHERE id = ?", (org_id,))
+    return True
+
+
 # --------------------------------------------------------------------------
 # contexts — append-only. A definition change is a new version, never an
 # overwrite, so what the parser knew last month stays answerable.

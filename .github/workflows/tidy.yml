@@ -1,0 +1,80 @@
+# Housekeeping against the live service, run by hand.
+#
+# The sandbox this repo is developed in cannot reach Render, so anything that
+# has to touch live data runs here. Everything it does is destructive in the
+# way a filing decision is destructive, so it is dispatch-only, it names its
+# targets explicitly, and it prints what it did.
+name: Tidy the live service
+
+on:
+  workflow_dispatch:
+    inputs:
+      retract:
+        description: "Report ids to retract, comma-separated"
+        required: false
+        default: ""
+      delete_orgs:
+        description: "Client ids to delete, comma-separated (refused if they hold reports)"
+        required: false
+        default: ""
+
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retract superseded reports
+        if: inputs.retract != ''
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+          IDS: ${{ inputs.retract }}
+        run: |
+          # Retracted, not deleted: the link keeps resolving and tells the
+          # reader a figure was wrong, which is the whole point of the rule.
+          for id in $(echo "$IDS" | tr ',' ' '); do
+            code=$(curl -sS -o out.json -w "%{http_code}" -m 30 -X PATCH \
+              "$API/studio/reports/$id/status?new_status=retracted" \
+              -H "Authorization: Bearer $TOKEN")
+            echo "retract $id -> HTTP $code"
+            test "$code" = "200"
+          done
+
+      - name: Delete empty clients
+        if: inputs.delete_orgs != ''
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+          IDS: ${{ inputs.delete_orgs }}
+        run: |
+          # 409 here is the API refusing to orphan a link somebody holds.
+          # That is a correct answer, so surface it rather than swallow it.
+          for id in $(echo "$IDS" | tr ',' ' '); do
+            code=$(curl -sS -o out.json -w "%{http_code}" -m 30 -X DELETE \
+              "$API/studio/orgs/$id" -H "Authorization: Bearer $TOKEN")
+            echo "delete $id -> HTTP $code"
+            if [ "$code" = "409" ]; then cat out.json; echo; fi
+            test "$code" = "204"
+          done
+
+      - name: What a stakeholder sees now
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          # Report the resulting state, keys masked — this log is public.
+          curl -sS -m 30 "$API/studio/orgs" -H "Authorization: Bearer $TOKEN" -o orgs.json
+          python3 -c "import json;[print('::add-mask::'+o['share_key']) for o in json.load(open('orgs.json'))]"
+          n=$(python3 -c "import json;print(len(json.load(open('orgs.json'))))")
+          for i in $(seq 0 $((n - 1))); do
+            org=$(python3 -c "import json;print(json.load(open('orgs.json'))[$i]['id'])")
+            key=$(python3 -c "import json;print(json.load(open('orgs.json'))[$i]['share_key'])")
+            curl -sS -m 30 "$API/portal/$org?k=$key" -o "portal-$i.json"
+          done
+          python3 - <<'PY'
+          import glob, json
+          for f in sorted(glob.glob("portal-*.json")):
+              p = json.load(open(f))
+              print(f"{p['org']['id']} ({p['org']['name']}): {len(p['reports'])} report(s)")
+              for r in p["reports"]:
+                  print("   -", r["id"], "|", r["title"].get("fr") or r["title"].get("en"))
+          PY

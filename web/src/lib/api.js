@@ -60,6 +60,7 @@ export const removeTile = (id, tileId) =>
   req(`/studio/orgs/${id}/tiles/${tileId}`, { method: 'DELETE', auth: true })
 export const rotateOrgKey = (id) =>
   req(`/studio/orgs/${id}/rotate-key`, { method: 'POST', auth: true })
+export const deleteOrg = (id) => req(`/studio/orgs/${id}`, { method: 'DELETE', auth: true })
 export const getOrgContext = (id) => req(`/studio/orgs/${id}/context`, { auth: true })
 export const reportReads = (id) => req(`/studio/reports/${id}/reads`, { auth: true })
 export const saveOrgContext = (id, body) =>

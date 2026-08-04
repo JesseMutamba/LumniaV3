@@ -696,8 +696,18 @@ export default function Studio({ locale, onPublished }) {
                 <span className="muted">
                   {o.report_count} {L ? 'rapports' : 'reports'}
                 </span>
+                {/* A portal link for a client with nothing published opens to
+                    an empty page. Say so rather than hand it over. */}
                 <button
                   className="link"
+                  disabled={o.report_count === 0}
+                  title={
+                    o.report_count === 0
+                      ? L
+                        ? 'Rien de publié — ce lien ouvrirait sur une page vide'
+                        : 'Nothing published — this link would open on an empty page'
+                      : undefined
+                  }
                   onClick={() => {
                     navigator.clipboard.writeText(api.portalUrl(o))
                     setCopiedOrg(o.id)
@@ -711,6 +721,21 @@ export default function Studio({ locale, onPublished }) {
                 <button className="link" onClick={() => openContext(o)}>
                   {ctxOrg === o.id ? (L ? 'fermer' : 'close') : (L ? 'contexte' : 'context')}
                 </button>
+                {/* Only offered where it is safe: a client holding a report is
+                    refused by the API anyway, since somebody holds that link. */}
+                {o.report_count === 0 && (
+                  <button
+                    className="link"
+                    onClick={() => {
+                      const msg = L
+                        ? `Supprimer « ${o.name} » ? Aucun rapport publié — le contexte et les classeurs conservés partent avec.`
+                        : `Delete “${o.name}”? Nothing published — its context and retained workbooks go with it.`
+                      if (confirm(msg)) run(() => api.deleteOrg(o.id)).then(refresh)
+                    }}
+                  >
+                    {L ? 'supprimer' : 'delete'}
+                  </button>
+                )}
               </div>
             ))}
           </div>
