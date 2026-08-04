@@ -564,3 +564,78 @@ def test_budget_vs_actual_across_two_files(client, auth):
     # the machine draft with cross-file provenance publishes as-is
     r = client.post("/v1/orgs/bva/reports", json=body["draft"], headers=auth)
     assert r.status_code == 201
+
+
+# --------------------------------------------------------------------------
+# narration — code computes, the narrate module speaks
+# --------------------------------------------------------------------------
+
+def test_narrate_speaks_the_computed_facts(client, auth):
+    client.post("/v1/orgs", json={"id": "nar", "name": "Nar", "sub": {"fr": "Kin"}},
+                headers=auth)
+    # narrate listed FIRST — it must still run last, after the computation
+    client.put("/v1/studio/orgs/nar/context", json={
+        "modules": ["narrate", "budget-vs-actual"],
+        "metrics": {
+            "OPEX": {
+                "budget": {"sheet": "opex", "label": "TOTAL DEPENSES"},
+                "actual": {"sheet": "reel", "label": "TOTAL SITE"},
+            }
+        },
+    }, headers=auth)
+    budget_wb = {"opex": [
+        ["Poste", "Jan", "Fév", "Mar", "Avr"],
+        ["Salaires", 60, 70, 70, 60],
+        ["TOTAL DEPENSES OPEX", 100, 100, 100, 100],
+    ]}
+    actual_wb = {"reel": [
+        ["Opération", "Jan", "Fév", "Mar"],
+        ["Plantations", 10, 20, 10],
+        ["TOTAL SITE", 20, 50, 50],
+    ]}
+    body = _ingest_many(client, auth, [budget_wb, actual_wb], "nar").json()
+    assert any(m.startswith("budget-vs-actual") for m in body["modules_run"])
+    assert body["modules_run"][-1].startswith("narrate")  # always last
+
+    prose = next(
+        b for b in body["draft"]["blocks"]
+        if b["type"] == "prose" and "Lecture —" in b["text"]["fr"]
+    )
+    # the narration restates the computed figures verbatim — 40 % of 300
+    assert "40 %" in prose["text"]["fr"] and "OPEX" in prose["text"]["fr"]
+    assert "40 %" in prose["text"]["en"] and "Reading —" in prose["text"]["en"]
+
+    # narration adds prose, not figures: the draft still publishes as-is
+    r = client.post("/v1/orgs/nar/reports", json=body["draft"], headers=auth)
+    assert r.status_code == 201
+
+
+def test_narrate_stays_silent_without_facts(client, auth):
+    client.post("/v1/orgs", json={"id": "mute", "name": "Mute", "sub": {"fr": "Kin"}},
+                headers=auth)
+    client.put("/v1/studio/orgs/mute/context", json={"modules": ["narrate"]},
+               headers=auth)
+    body = _ingest(client, auth, BUDGET_SHEET, org="mute").json()
+    # nothing was computed, so there is nothing to narrate — no empty shell
+    assert not any(m.startswith("narrate") for m in body["modules_run"])
+    assert not any(
+        b["type"] == "prose" and "Lecture —" in b["text"]["fr"]
+        for b in body["draft"]["blocks"]
+    )
+
+
+def test_narrate_number_guardrail():
+    from app.pipeline.modules import _numbers_in
+
+    facts = "Exécution · OPEX s'établit à 39,5 % (44 624 réels sur 3 mois)."
+    assert _numbers_in(facts) == {"395", "44624", "3"}
+    # a rewrite that invents or drops a figure no longer matches
+    assert _numbers_in("39,5 % soit 44 625 sur 3 mois") != _numbers_in(facts)
+    assert _numbers_in("39,5 % sur 3 mois") != _numbers_in(facts)
+
+
+def test_narrate_llm_gate_is_closed_without_key(monkeypatch):
+    from app.pipeline import modules
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert modules._llm_polish([("Un fait : 42.", "A fact: 42.")]) is None

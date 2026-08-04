@@ -12,6 +12,7 @@ Modules compute; every figure they emit carries provenance like any other.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Callable
@@ -19,8 +20,10 @@ from typing import Callable
 from ..schema import (
     BarPair,
     Flag,
+    Heading,
     Kpi,
     KpiGrid,
+    Prose,
     Rail,
     RailRow,
     Series,
@@ -406,6 +409,144 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
 
 
 # --------------------------------------------------------------------------
+# narrate — code computes, this layer speaks
+# --------------------------------------------------------------------------
+
+def _facts_from_blocks(blocks: list) -> list[tuple[str, str]]:
+    """Sentences already carrying their numbers, lifted from the computing
+    modules' blocks. Narration never computes; it restates."""
+    facts: list[tuple[str, str]] = []
+    for b in blocks:
+        kind = getattr(b, "type", None)
+        if kind == "kpiGrid":
+            for k in b.items:
+                unit = " %" if k.value.unit == "pct" else ""
+                n_fr = f"{k.value.n:g}".replace(".", ",")
+                fr = f"{k.label.fr} s'établit à {n_fr}{unit}"
+                en = f"{k.label.get('en')} stands at {k.value.n:g}{unit}"
+                if k.sub:
+                    fr += f" ({k.sub.fr})"
+                    en += f" ({k.sub.get('en')})"
+                facts.append((fr + ".", en + "."))
+        elif kind == "flag":
+            facts.append(
+                (f"{b.tag.fr} : {b.title.fr}.",
+                 f"{b.tag.get('en')}: {b.title.get('en')}.")
+            )
+    return facts
+
+
+_NUM_RE = re.compile(r"\d(?:[\d  .,]*\d)?")
+
+
+def _numbers_in(text: str) -> set[str]:
+    """Digit groups, spacing and separators stripped — '44 624' == '44624'."""
+    return {re.sub(r"[^\d]", "", m) for m in _NUM_RE.findall(text)}
+
+
+def _llm_polish(facts: list[tuple[str, str]]) -> tuple[str, str] | None:
+    """Optional: ask Claude to turn the fact sentences into flowing analyst
+    prose. Gated on ANTHROPIC_API_KEY being present in the environment; any
+    failure — network, refusal, invented figures — falls back to the
+    template. The model may rephrase; it may not add or alter a number."""
+    import json
+    import os
+
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        return None
+    try:
+        import httpx
+
+        model = os.environ.get("LUMNIA_NARRATE_MODEL", "claude-opus-5")
+        facts_fr = "\n".join(f"- {fr}" for fr, _ in facts)
+        facts_en = "\n".join(f"- {en}" for _, en in facts)
+        r = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model,
+                "max_tokens": 1024,
+                "system": (
+                    "You write the narrative paragraph of a verified financial "
+                    "report. You receive computed facts; every number in them "
+                    "is final. Reuse each number EXACTLY as written — same "
+                    "digits, same grouping. Never introduce a figure that is "
+                    "not in the facts, never total, never estimate. Respond "
+                    "with a JSON object {\"fr\": \"...\", \"en\": \"...\"}: "
+                    "one short professional paragraph per language, nothing "
+                    "else."
+                ),
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Faits (français):\n{facts_fr}\n\n"
+                            f"Facts (English):\n{facts_en}"
+                        ),
+                    }
+                ],
+            },
+            timeout=25.0,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if data.get("stop_reason") == "refusal":
+            return None
+        text = "".join(
+            p.get("text", "") for p in data.get("content", [])
+            if p.get("type") == "text"
+        ).strip()
+        if text.startswith("```"):
+            text = text.strip("`").removeprefix("json").strip()
+        out = json.loads(text)
+        fr, en = str(out["fr"]), str(out["en"])
+        # The guardrail: the prose must carry exactly the numbers the facts
+        # carry — none dropped, none invented.
+        if (
+            _numbers_in(fr) != _numbers_in(facts_fr)
+            or _numbers_in(en) != _numbers_in(facts_en)
+        ):
+            return None
+        return fr, en
+    except Exception:
+        return None
+
+
+def _run_narrate(wbs: list[Workbook], tables, ctx, extras) -> list:
+    """Narrates what the other modules computed this ingest — nothing more.
+    Deterministic templates by default; a Claude rewrite when the API key is
+    present, with every number checked verbatim against the facts. Runs last
+    whatever order the context lists it in."""
+    facts = _facts_from_blocks(extras.get("blocks") or [])
+    if not facts:
+        return []
+    polished = _llm_polish(facts)
+    if polished:
+        fr, en = polished
+    else:
+        fr = "Lecture — " + " ".join(f for f, _ in facts)
+        en = "Reading — " + " ".join(e for _, e in facts)
+    return [
+        Heading(
+            level=3,
+            label=Text(fr="Narration", en="Narration"),
+            text=Text(fr="Lecture des résultats", en="Reading the results"),
+            dek=Text(
+                fr="Le code calcule ; cette section raconte. Chaque chiffre reprend un résultat calculé ci-dessus.",
+                en="Code computes; this section speaks. Every figure restates a computed result above.",
+            ),
+        ),
+        Prose(text=Text(fr=fr, en=en)),
+    ]
+
+
+# --------------------------------------------------------------------------
 # registry
 # --------------------------------------------------------------------------
 
@@ -440,6 +581,13 @@ MODULES: dict[str, Module] = {
             description_en="Entries with the same date and amount in two journals: the same money counted twice.",
             run=_run_reconciliation,
         ),
+        Module(
+            name="narrate",
+            version="1.0",
+            description_fr="Raconte en prose ce que les autres modules ont calculé — chaque chiffre repris tel quel, jamais inventé. Relecture Claude optionnelle.",
+            description_en="Narrates in prose what the other modules computed — every figure restated verbatim, never invented. Optional Claude polish.",
+            run=_run_narrate,
+        ),
     ]
 }
 
@@ -447,14 +595,21 @@ DEFAULT_MODULES = ["movements"]
 
 
 def run_modules(names: list[str], wbs: list[Workbook], tables, ctx, extras) -> tuple[list, list[str]]:
-    """Run the named modules in order; returns (blocks, attribution)."""
+    """Run the named modules in order; returns (blocks, attribution).
+
+    `narrate` always goes last, whatever order the context lists: it speaks
+    about what the others computed, so it must see their blocks — passed to
+    every module as extras["blocks"], the output accumulated so far."""
+    ordered = [n for n in names if n != "narrate"]
+    if "narrate" in names:
+        ordered.append("narrate")
     blocks: list = []
     ran: list[str] = []
-    for name in names:
+    for name in ordered:
         mod = MODULES.get(name)
         if not mod:
             continue
-        out = mod.run(wbs, tables, ctx, extras)
+        out = mod.run(wbs, tables, ctx, {**extras, "blocks": blocks})
         if out:
             blocks.extend(out)
             ran.append(f"{mod.name} v{mod.version}")
