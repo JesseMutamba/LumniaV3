@@ -295,26 +295,31 @@ def _find_series(wbs: list[Workbook], sd: SeriesDef):
     """Locate the row the context describes: (workbook, sheet name, row,
     [(col, value), ...]). Numeric cells left to right; leading cells dropped
     per `skip`; an annual-total column (first ≈ sum of the rest) is dropped
-    automatically."""
+    automatically.
+
+    A label that matches a row exactly wins over one that merely appears
+    inside it. Real sheets carry « CPO » and « CPO 2025 » ten rows apart,
+    and the looser match would silently answer with the wrong year."""
+    loose = None
     for wb in wbs:
         for name, sheet in wb.sheets.items():
             if _norm(name) != _norm(sd.sheet):
                 continue
             for r in range(1, sheet.rows + 1):
                 row = sheet.grid[r - 1] or []
-                if not any(
-                    isinstance(c, str) and _norm(sd.label) in _norm(c)
-                    for c in row[:4]
-                    if isinstance(c, str)
-                ):
+                labels = [_norm(c) for c in row[:4] if isinstance(c, str)]
+                if not any(_norm(sd.label) in c for c in labels):
                     continue
                 cells = [
                     (ci + 1, float(v)) for ci, v in enumerate(row) if _is_num(v)
                 ]
                 cells = _trim_totals(cells[sd.skip:])
-                if cells:
+                if not cells:
+                    continue
+                if any(c == _norm(sd.label) for c in labels):
                     return wb, name, r, cells
-    return None
+                loose = loose or (wb, name, r, cells)
+    return loose
 
 
 def _trim_totals(cells: list[tuple[int, float]]) -> list[tuple[int, float]]:
@@ -343,6 +348,116 @@ def _trim_totals(cells: list[tuple[int, float]]) -> list[tuple[int, float]]:
     return cells
 
 
+def _aligned(wbs: list[Workbook], mdef):
+    """Both sides of a metric, summed over the months the actuals reach.
+
+    Alignment is by month position, never by sequence: a month with no
+    figure leaves a blank cell, and pairing what survives in order would
+    compare March against February. One implementation, used by every
+    module that compares a plan to a reality."""
+    found_b = _find_series(wbs, mdef.budget)
+    found_a = _find_series(wbs, mdef.actual)
+    if not found_b or not found_a:
+        return None
+    bwb, bsheet, brow, bcells = found_b
+    awb, asheet, arow, acells = found_a
+    bmap = {c - bcells[0][0]: (c, v) for c, v in bcells}
+    amap = {c - acells[0][0]: (c, v) for c, v in acells}
+    n = min(max(amap) + 1, max(bmap) + 1)
+    a_in = [(c, v) for off, (c, v) in sorted(amap.items()) if off < n]
+    b_in = [(c, v) for off, (c, v) in sorted(bmap.items()) if off < n]
+    if not a_in or not b_in:
+        return None
+    return {
+        "n": n,
+        "sum_a": sum(v for _, v in a_in),
+        "sum_b": sum(v for _, v in b_in),
+        "amap": amap, "bmap": bmap,
+        "awb": awb, "asheet": asheet, "arow": arow,
+        "bwb": bwb, "bsheet": bsheet, "brow": brow,
+        "a_src": Src(file=awb.source.idx, sheet=asheet,
+                     cells=a1_range(arow, a_in[0][0], arow, a_in[-1][0])),
+        "b_src": Src(file=bwb.source.idx, sheet=bsheet,
+                     cells=a1_range(brow, b_in[0][0], brow, b_in[-1][0])),
+    }
+
+
+# --------------------------------------------------------------------------
+# efficiency — the rate a plan implied, against the rate reality produced
+# --------------------------------------------------------------------------
+
+def _run_efficiency(wbs: list[Workbook], tables, ctx, extras) -> list:
+    """Cost per tonne, extraction rate, yield per hectare — any rate the
+    client declares as one metric over another.
+
+    This is the module that catches what a money-only view hides. Spending
+    40 % of a budget reads as comfortable until output is at 30 % of plan:
+    the rate is what carries that, and neither figure alone says it."""
+    if not ctx or not getattr(ctx, "ratios", None):
+        return []
+    metrics = ctx.metrics or {}
+    blocks: list = []
+    for rname, rdef in ctx.ratios.items():
+        num, den = metrics.get(rdef.numerator), metrics.get(rdef.denominator)
+        if not num or not den:
+            continue
+        an, ad = _aligned(wbs, num), _aligned(wbs, den)
+        if not an or not ad:
+            continue
+        n = min(an["n"], ad["n"])          # compare over months both cover
+        if not an["sum_a"] or not ad["sum_a"] or not ad["sum_b"]:
+            continue
+        scale = 100.0 if rdef.unit == "pct" else 1.0
+        actual = an["sum_a"] / ad["sum_a"] * scale
+        planned = an["sum_b"] / ad["sum_b"] * scale
+        gap = (actual / planned - 1) * 100 if planned else 0.0
+        worse = gap > 0 if rdef.lower_is_better else gap < 0
+        fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
+        num_u = "" if num.unit == "none" else f" {num.unit}"
+        den_u = "" if den.unit == "none" else f" {den.unit}"
+        blocks.append(
+            KpiGrid(items=[Kpi(
+                label=Text(fr=rname, en=rname),
+                value=Value(n=round(actual, 1), unit=rdef.unit, derived="ratio",
+                            src=an["a_src"]),
+                sub=Text(
+                    fr=(f"contre {planned:,.1f} prévu — {gap:+.0f} % sur {n} mois"
+                        .replace(",", " ")),
+                    en=(f"against {planned:,.1f} planned — {gap:+.0f} % over {n} months"),
+                ),
+                tone="bad" if worse and abs(gap) > 15 else
+                     "warn" if worse else "good",
+                metric=rname,
+                definition=rdef.definition,
+                methodology=rdef.methodology,
+                lineage=[
+                    Step(text=Text(
+                            fr=f"{rdef.numerator} réel sur {n} mois",
+                            en=f"actual {rdef.numerator} over {n} months"),
+                         cells=f"{an['asheet']}!{an['a_src'].cells}",
+                         n=round(an["sum_a"], 2)),
+                    Step(text=Text(
+                            fr=f"{rdef.denominator} réel sur les mêmes mois",
+                            en=f"actual {rdef.denominator} over the same months"),
+                         cells=f"{ad['asheet']}!{ad['a_src'].cells}",
+                         n=round(ad["sum_a"], 2)),
+                    Step(text=Text(
+                            fr=f"Taux réel : {fmt(an['sum_a'])}{num_u} ÷ {fmt(ad['sum_a'])}{den_u}",
+                            en=f"Actual rate: {fmt(an['sum_a'])}{num_u} ÷ {fmt(ad['sum_a'])}{den_u}"),
+                         n=round(actual, 1)),
+                    Step(text=Text(
+                            fr=f"Taux prévu au plan : {fmt(an['sum_b'])}{num_u} ÷ {fmt(ad['sum_b'])}{den_u}",
+                            en=f"Rate the plan implied: {fmt(an['sum_b'])}{num_u} ÷ {fmt(ad['sum_b'])}{den_u}"),
+                         cells=f"{an['bsheet']}!{an['b_src'].cells}",
+                         n=round(planned, 1)),
+                    Step(text=Text(fr="Écart au plan", en="Gap to plan"),
+                         n=round(gap, 1)),
+                ],
+            )])
+        )
+    return blocks
+
+
 def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
     """For each metric the context declares: align the budget and actual
     monthly series from wherever they live, compare over the months the
@@ -353,30 +468,17 @@ def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
         return []
     blocks: list = []
     for mname, mdef in ctx.metrics.items():
-        found_b = _find_series(wbs, mdef.budget)
-        found_a = _find_series(wbs, mdef.actual)
-        if not found_b or not found_a:
+        al = _aligned(wbs, mdef)
+        if not al:
             continue
-        bwb, bsheet, brow, bcells = found_b
-        awb, asheet, arow, acells = found_a
-        # Align by month position, never by sequence. A month with no spend
-        # leaves a blank cell; pairing the surviving cells in order would
-        # compare March's spend against February's budget and drop March's
-        # budget entirely — halving the reported execution.
-        bmap = {c - bcells[0][0]: (c, v) for c, v in bcells}
-        amap = {c - acells[0][0]: (c, v) for c, v in acells}
-        n = min(max(amap) + 1, max(bmap) + 1)   # months the actuals reach
-        if n == 0:
+        n, sum_a, sum_b = al["n"], al["sum_a"], al["sum_b"]
+        if not sum_b:
             continue
-        a_in = [(c, v) for off, (c, v) in sorted(amap.items()) if off < n]
-        b_in = [(c, v) for off, (c, v) in sorted(bmap.items()) if off < n]
-        sum_a = sum(v for _, v in a_in)
-        sum_b = sum(v for _, v in b_in)
-        if not sum_b or not a_in:
-            continue
+        awb, asheet, arow = al["awb"], al["asheet"], al["arow"]
+        bwb, bsheet, brow = al["bwb"], al["bsheet"], al["brow"]
+        bmap, amap = al["bmap"], al["amap"]
         pct = round(sum_a / sum_b * 100, 1)
-        a_range = a1_range(arow, a_in[0][0], arow, a_in[-1][0])
-        b_range = a1_range(brow, b_in[0][0], brow, b_in[-1][0])
+        a_range, b_range = al["a_src"].cells, al["b_src"].cells
         fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
         lineage = [
             Step(
@@ -795,6 +897,13 @@ MODULES: dict[str, Module] = {
             description_fr="Écritures à même date et même montant dans deux journaux : le même argent compté deux fois.",
             description_en="Entries with the same date and amount in two journals: the same money counted twice.",
             run=_run_reconciliation,
+        ),
+        Module(
+            name="efficiency",
+            version="1.0",
+            description_fr="Taux déclarés entre deux métriques — coût par tonne, taux d'extraction — comparés au taux que le plan impliquait sur les mêmes mois.",
+            description_en="Declared rates between two metrics — cost per tonne, extraction rate — against the rate the plan implied over the same months.",
+            run=_run_efficiency,
         ),
         Module(
             name="coverage",

@@ -161,6 +161,94 @@ def test_g3c_a_budgeted_line_with_no_spend_stays_in_the_denominator(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# G3d–G3f · efficiency: the rate a plan implied against the rate reality gave
+# --------------------------------------------------------------------------
+
+EFF_BUDGET = {"opex": [
+    ["Poste", "Jan", "Fév", "Mar"],
+    ["Ligne", 10, 10, 10],
+    ["TOTAL DEPENSES OPEX", 300, 300, 300],
+]}
+EFF_ACTUAL = {"reel": [
+    ["Opération", "Jan", "Fév", "Mar"],
+    ["TOTAL SITE", 100, 100, 100],
+    ["Tonnes produites", 10, 10, 5],
+]}
+EFF_PLAN_TONNES = {"opex": [
+    ["Poste", "Jan", "Fév", "Mar"],
+    ["Ligne", 10, 10, 10],
+    ["TOTAL DEPENSES OPEX", 300, 300, 300],
+    ["Tonnes prévues", 30, 30, 30],
+]}
+
+EFF_CTX = ContextIn(
+    modules=["efficiency"],
+    metrics={
+        "OPEX": {"budget": {"sheet": "opex", "label": "TOTAL DEPENSES OPEX"},
+                 "actual": {"sheet": "reel", "label": "TOTAL SITE"}, "unit": "USD"},
+        "Tonnes": {"budget": {"sheet": "opex", "label": "Tonnes prévues"},
+                   "actual": {"sheet": "reel", "label": "Tonnes produites"},
+                   "unit": "t"},
+    },
+    ratios={"Coût par tonne": {"numerator": "OPEX", "denominator": "Tonnes",
+                               "unit": "USD/t"}},
+)
+
+
+def test_g3d_cost_per_tonne_meets_the_rate_the_plan_implied(tmp_path):
+    """The defect a money-only view hides. Hand-worked: 300 spent of 900
+    budgeted is 33 % — comfortable. But 25 tonnes came out of a planned 90,
+    so the real cost is 300/25 = 12,0 per tonne against a planned
+    900/90 = 10,0 — 20 % worse, while the spend column says all is well."""
+    blocks, _ = _run([EFF_PLAN_TONNES, EFF_ACTUAL], EFF_CTX, tmp_path)
+    k = _kpis(blocks)[0]
+    assert k.value.n == pytest.approx(12.0, abs=0.05)
+    assert k.value.unit == "USD/t"
+    assert "10.0" in k.sub.en and "+20 %" in k.sub.fr
+    assert k.tone == "bad"                       # over plan by more than 15 %
+    assert k.lineage[0].n == 300.0               # actual OPEX
+    assert k.lineage[1].n == 25.0                # actual tonnes
+    assert k.lineage[-1].n == pytest.approx(20.0, abs=0.1)   # the gap
+
+
+def test_g3e_a_rate_where_higher_is_better_reads_the_other_way(tmp_path):
+    """An extraction rate under plan is bad news; a cost per tonne under
+    plan is good news. The direction is the client's to declare."""
+    ctx = ContextIn(
+        modules=["efficiency"],
+        metrics=EFF_CTX.model_dump()["metrics"],
+        ratios={"Rendement": {"numerator": "Tonnes", "denominator": "OPEX",
+                              "unit": "ratio", "lower_is_better": False}},
+    )
+    blocks, _ = _run([EFF_PLAN_TONNES, EFF_ACTUAL], ctx, tmp_path)
+    k = _kpis(blocks)[0]
+    # 25/300 actual against 90/900 planned — below plan, and that is bad
+    assert k.value.n == pytest.approx(0.1, abs=0.01)
+    assert k.tone in ("warn", "bad")
+
+
+def test_g3f_a_label_matches_its_row_exactly_before_any_other(tmp_path):
+    """Real sheets carry « CPO » and « CPO 2025 » rows apart. The looser
+    match answered with whichever came first — silently the wrong year."""
+    plan = {"opex": [
+        ["Poste", "Jan", "Fév", "Mar"],
+        ["CPO 2025", 1, 1, 1],           # last year, listed first
+        ["TOTAL DEPENSES OPEX", 300, 300, 300],
+        ["CPO", 30, 30, 30],             # the row the context means
+    ]}
+    metrics = EFF_CTX.model_dump()["metrics"]
+    metrics["Tonnes"] = {"budget": {"sheet": "opex", "label": "CPO"},
+                         "actual": {"sheet": "reel", "label": "Tonnes produites"},
+                         "unit": "t"}
+    ctx = ContextIn(modules=["efficiency"], metrics=metrics,
+                    ratios=EFF_CTX.model_dump()["ratios"])
+    blocks, _ = _run([plan, EFF_ACTUAL], ctx, tmp_path)
+    k = _kpis(blocks)[0]
+    # planned rate uses the 30/month row (900/90 = 10), not the 1/month row
+    assert k.lineage[3].n == pytest.approx(10.0, abs=0.05)
+
+
+# --------------------------------------------------------------------------
 # G4 · coverage: uncoded entries, and the balance column that is not an amount
 # --------------------------------------------------------------------------
 
