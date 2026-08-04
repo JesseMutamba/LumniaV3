@@ -135,6 +135,8 @@ h3.b-t{font-size:24px;line-height:1.16}
 .sw.env{background:repeating-linear-gradient(135deg,rgba(235,231,222,.22) 0 2px,transparent 2px 4px);
   border:1px solid rgba(235,231,222,.2)}
 .sw.act{background:var(--gold)}
+.sw.plan{background:rgba(235,231,222,.1);border:1px solid rgba(235,231,222,.4)}
+.sw.actg{background:var(--gold)}
 .sw.pace{background:var(--bright)}
 .rr{padding-top:20px}
 .rr:first-of-type{padding-top:0}
@@ -317,6 +319,33 @@ td.pos{color:var(--gold)}
   font-family:var(--mono);font-size:11px;line-height:1.6;letter-spacing:.06em;
   color:var(--mut-6)}
 .reads .link{font-size:12px}
+/* report dashboard lens */
+.lens{display:inline-flex;border:1px solid var(--line-soft);border-radius:3px;
+  overflow:hidden;margin:0 0 34px}
+.lens button{appearance:none;background:none;border:0;padding:10px 22px;
+  font-family:var(--mono);font-weight:500;font-size:10px;line-height:1;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--mut-5);cursor:pointer}
+.lens button+button{border-left:1px solid var(--line-soft)}
+.lens button[aria-selected="true"]{background:var(--well);color:var(--gold)}
+.lens button:hover{color:var(--bright)}
+.db-hero{border:1px solid var(--line);border-left:2px solid var(--gold);border-radius:4px;
+  background:var(--panel);padding:34px 38px;margin-bottom:26px}
+.db-hero[data-tone="warn"],.db-hero[data-tone="bad"]{border-left-color:var(--terracotta)}
+.db-hero .k{font-family:var(--mono);font-weight:500;font-size:10px;line-height:1;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--mut-42);margin-bottom:16px}
+.db-hero .v{font-family:var(--serif);font-weight:300;font-size:76px;line-height:1;
+  color:var(--bright);margin-bottom:14px}
+.db-hero[data-tone="warn"] .v,.db-hero[data-tone="bad"] .v{color:var(--terracotta)}
+.db-hero[data-tone="good"] .v{color:var(--gold)}
+.db-hero .s{font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--mut-6);
+  max-width:560px}
+.db-flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0 22px}
+.db-narr{border:1px solid var(--line-soft);border-radius:4px;background:var(--well);
+  padding:24px 28px;margin:8px 0 20px}
+.db-narr .b-prose{margin:0}
+.db .fine{margin-top:8px}
+@media(max-width:900px){.db-hero .v{font-size:54px}}
+
 .dash{border:1px solid var(--line-soft);border-radius:3px;background:var(--well)}
 .dash-row{display:grid;grid-template-columns:1.2fr 1fr 1.2fr 1.2fr 1.4fr auto;gap:16px;
   align-items:baseline;padding:13px 16px;border-bottom:1px solid var(--line-soft)}

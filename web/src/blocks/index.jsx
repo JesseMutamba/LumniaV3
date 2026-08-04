@@ -122,7 +122,18 @@ function BarPair({ b, locale, sources }) {
             {t(b.title, locale)}
             <Prov src={plan?.values?.[0]?.src} sources={sources} />
           </span>
-          <span>{t(b.sub, locale)}</span>
+          <span className="key">
+            <i>
+              <span className="sw plan" />
+              {t(plan?.label, locale) || 'Budget'}
+            </i>
+            {act && (
+              <i>
+                <span className="sw actg" />
+                {t(act.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')}
+              </i>
+            )}
+          </span>
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t(b.title, locale)}>
           {[1, 2, 3, 4].map((i) => {
@@ -147,10 +158,14 @@ function BarPair({ b, locale, sources }) {
             return (
               <g key={m + i}>
                 {p !== undefined && (
-                  <rect x={x0} y={y(p)} width={w} height={Math.max(0, P.t + ih - y(p))} className="bar-plan" />
+                  <rect x={x0} y={y(p)} width={w} height={Math.max(0, P.t + ih - y(p))} className="bar-plan">
+                    <title>{`${m} · ${t(plan?.label, locale) || 'Budget'} : ${nf(p, locale)}`}</title>
+                  </rect>
                 )}
                 {a !== undefined && (
-                  <rect x={x0 + w} y={y(a)} width={w} height={Math.max(0, P.t + ih - y(a))} className="bar-act" />
+                  <rect x={x0 + w} y={y(a)} width={w} height={Math.max(0, P.t + ih - y(a))} className="bar-act">
+                    <title>{`${m} · ${t(act?.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')} : ${nf(a, locale)}`}</title>
+                  </rect>
                 )}
                 <text className="ax" x={P.l + i * bw + bw / 2} y={H - 8} textAnchor="middle">
                   {m}

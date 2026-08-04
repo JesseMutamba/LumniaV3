@@ -29,9 +29,10 @@ export function fmt(v, locale) {
       return `${nf(n, locale)} FC`
     case 'USD/t':
       return `${money(n, locale)} /t`
-    case 'ratio':
-    case 'pct':
+    case 'ratio': // a fraction: 0.402 reads 40.2 %
       return `${nf(n * 100, locale, 1)} %`
+    case 'pct': // already a percentage: 39.5 reads 39.5 %
+      return `${nf(n, locale, 1)} %`
     case 't':
       return `${nf(n, locale, 1)} t`
     case 'ha':

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Block from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
+import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import * as api from './lib/api.js'
 import { t } from './lib/format.js'
 import mark from './assets/lumnia-mark.png'
@@ -197,10 +198,12 @@ function PortalPage({ id, shareKey, locale }) {
 function Viewer({ id, shareKey, locale }) {
   const [rep, setRep] = useState(null)
   const [err, setErr] = useState(null)
+  const [lens, setLens] = useState('doc')
 
   useEffect(() => {
     setRep(null)
     setErr(null)
+    setLens('doc')
     api.getReport(id, shareKey).then(setRep).catch(setErr)
   }, [id, shareKey])
 
@@ -248,9 +251,31 @@ function Viewer({ id, shareKey, locale }) {
         </div>
       </div>
 
-      {rep.blocks.map((b, i) => (
-        <Block key={i} b={b} locale={locale} sources={rep.sources} />
-      ))}
+      {hasDashboard(rep) && (
+        <div className="lens" role="tablist" aria-label={L ? 'Vue' : 'View'}>
+          {[
+            ['doc', L ? 'Document' : 'Document'],
+            ['dash', L ? 'Tableau de bord' : 'Dashboard'],
+          ].map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={lens === k}
+              onClick={() => setLens(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {lens === 'dash' && hasDashboard(rep) ? (
+        <Dashboard rep={rep} locale={locale} />
+      ) : (
+        rep.blocks.map((b, i) => (
+          <Block key={i} b={b} locale={locale} sources={rep.sources} />
+        ))
+      )}
 
       <div className="foot">
         <div className="rule">
