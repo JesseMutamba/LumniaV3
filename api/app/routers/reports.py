@@ -7,6 +7,7 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -21,6 +22,7 @@ from ..auth import (
     fingerprint,
     new_share_key,
     rate_limit,
+    read_session,
     require_author,
 )
 from ..pipeline.checks import check_provenance
@@ -109,35 +111,48 @@ def get_portal(org_id: str, request: Request, k: str | None = Query(default=None
 # reading
 # --------------------------------------------------------------------------
 
-def _readable(rep: Report, key: str | None) -> Report:
-    """A reader with the right key sees the report. Nobody else does.
-
-    The key is stripped from the response — a stakeholder should not be able
-    to forward a link they didn't mean to forward by copying it out of a
-    devtools panel. They already have the URL; they don't need it twice.
-    """
-    if rep.status == "retracted":
-        raise HTTPException(410, "This report has been retracted.")
-    if not check_share_key(key, rep.share_key):
-        raise HTTPException(404, "Unknown report or bad key.")
-    return rep.model_copy(update={"share_key": None})
-
-
 @router.get(
     "/reports/{report_id}",
     response_model=Report,
     tags=["reports"],
     dependencies=[Depends(rate_limit)],
 )
-def get_report(report_id: str, request: Request, k: str | None = Query(default=None)):
-    """Public read. Requires the share key that came with the link. Every
-    attempt on a real report is logged — accepted or refused."""
+def get_report(
+    report_id: str,
+    request: Request,
+    k: str | None = Query(default=None),
+    authorization: str = Header(default=""),
+):
+    """Public read. Two ways in, and no third.
+
+    Either the caller holds the share key that came with the link, or they
+    are signed in as a client of the org that owns this report. The second
+    is what lets a client browse their own reports without a key trailing
+    through their address bar and their browser history.
+
+    Every attempt on a real report is logged — accepted or refused — and a
+    retracted report is readable by neither.
+
+    The key is stripped from the response: a stakeholder should not be able
+    to forward a link they didn't mean to forward by copying it out of a
+    devtools panel. They already have the URL; they don't need it twice.
+    """
     rep = store.get_report(report_id)
     if not rep:
         raise HTTPException(404, f"Unknown report: {report_id}")
-    ok = rep.status != "retracted" and check_share_key(k, rep.share_key)
+    by_key = check_share_key(k, rep.share_key)
+    # The org comes from the account, never from the request, so a signed-in
+    # client cannot reach across to another client's report.
+    username = read_session(authorization.removeprefix("Bearer ").strip())
+    user = store.get_user(username) if username else None
+    by_session = bool(user and not user.disabled and user.org == rep.org)
+    ok = rep.status != "retracted" and (by_key or by_session)
     store.log_read("report", report_id, ok, fingerprint(request))
-    return _readable(rep, k)
+    if rep.status == "retracted":
+        raise HTTPException(410, "This report has been retracted.")
+    if not ok:
+        raise HTTPException(404, "Unknown report or bad key.")
+    return rep.model_copy(update={"share_key": None})
 
 
 @router.get(

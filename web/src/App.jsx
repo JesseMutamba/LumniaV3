@@ -2,20 +2,27 @@ import { useEffect, useMemo, useState } from 'react'
 import Block from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
+import Landing from './pages/Landing.jsx'
+import ClientHome from './pages/ClientHome.jsx'
 import * as api from './lib/api.js'
 import { t } from './lib/format.js'
 import mark from './assets/lumnia-mark.png'
 
 /**
- * Two surfaces, one build.
+ * Four surfaces, one build.
  *
- *   #/r/<id>?k=<key>   Viewer — what a stakeholder opens. Read only, no nav,
- *                              no upload, no sign of the rest of the platform.
+ *   /                  Landing — the public page, or the client's own reports
+ *                              once they are signed in.
+ *   #/r/<id>?k=<key>   Viewer — what a stakeholder opens with a link. Read
+ *                              only, no nav, no sign of the rest of the platform.
+ *   #/m/<id>           The same report opened by a signed-in client: the
+ *                              session says who they are, so no key rides
+ *                              along in the URL or the browser history.
  *   #/studio           Studio — what you open. Publish, share, retract.
  *
- * A reader never reaches Studio because a reader never has the token, and a
- * report they hold no key for returns 404. Nothing sensitive ships in the
- * bundle because the bundle holds nothing worth having.
+ * A reader never reaches Studio because a reader never has the author token,
+ * and a report they hold neither key nor session for returns 404. Nothing
+ * sensitive ships in the bundle because the bundle holds nothing worth having.
  */
 function parseHash() {
   const raw = location.hash.replace(/^#/, '') || '/'
@@ -23,6 +30,8 @@ function parseHash() {
   const q = new URLSearchParams(qs || '')
   const m = path.match(/^\/r\/([^/?]+)/)
   if (m) return { view: 'report', id: decodeURIComponent(m[1]), key: q.get('k') }
+  const mine = path.match(/^\/m\/([^/?]+)/)
+  if (mine) return { view: 'myreport', id: decodeURIComponent(mine[1]) }
   const c = path.match(/^\/c\/([^/?]+)/)
   if (c) return { view: 'portal', id: decodeURIComponent(c[1]), key: q.get('k') }
   if (path.startsWith('/studio')) return { view: 'studio' }
@@ -48,6 +57,20 @@ const firstLocale = () => {
 export default function App() {
   const [route, setRoute] = useState(parseHash)
   const [locale, setLocale] = useState(firstLocale)
+  const [session, setSess] = useState(api.getSession)
+
+  async function signIn(username, password) {
+    const s = await api.login(username, password)
+    api.setSession(s)
+    setSess(s)
+    location.hash = '#/'
+  }
+
+  function signOut() {
+    api.setSession(null)
+    setSess(null)
+    location.hash = '#/'
+  }
 
   const chooseLocale = (l) => {
     setLocale(l)
@@ -70,85 +93,51 @@ export default function App() {
     document.documentElement.lang = locale
   }, [locale])
 
+  // The landing page brings its own nav and is written in English only, so
+  // the platform bar — and a language toggle with nothing to toggle — would
+  // be two headers arguing with each other.
+  const bare = route.view === 'home' && !session
+
   return (
     <div className="shell">
-      <div className="top">
-        <a className="brand" href="#/">
-          <img src={mark} alt="" />
-          <span>Lumnia</span>
-        </a>
-        <div className="grow" />
-        {route.view !== 'report' && route.view !== 'portal' && (
-          <a className="tbtn" href={route.view === 'studio' ? '#/' : '#/studio'}>
-            {route.view === 'studio' ? (locale === 'fr' ? 'accueil' : 'home') : 'studio'}
+      {!bare && (
+        <div className="top">
+          <a className="brand" href="#/">
+            <img src={mark} alt="" />
+            <span>Lumnia</span>
           </a>
-        )}
-        <div className="lang" role="group" aria-label="Locale">
-          {['fr', 'en'].map((l) => (
-            <button key={l} aria-pressed={locale === l} onClick={() => chooseLocale(l)}>
-              {l.toUpperCase()}
-            </button>
-          ))}
+          <div className="grow" />
+          {route.view !== 'report' && route.view !== 'portal' && !session && (
+            <a className="tbtn" href={route.view === 'studio' ? '#/' : '#/studio'}>
+              {route.view === 'studio' ? (locale === 'fr' ? 'accueil' : 'home') : 'studio'}
+            </a>
+          )}
+          <div className="lang" role="group" aria-label="Locale">
+            {['fr', 'en'].map((l) => (
+              <button key={l} aria-pressed={locale === l} onClick={() => chooseLocale(l)}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {route.view === 'report' && (
         <Viewer id={route.id} shareKey={route.key} locale={locale} />
+      )}
+      {route.view === 'myreport' && (
+        <Viewer id={route.id} mine locale={locale} onExpired={signOut} />
       )}
       {route.view === 'portal' && (
         <PortalPage id={route.id} shareKey={route.key} locale={locale} />
       )}
       {route.view === 'studio' && <Studio locale={locale} />}
-      {route.view === 'home' && <Home locale={locale} />}
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ home */
-
-function Home({ locale }) {
-  const [h, setH] = useState(null)
-  useEffect(() => {
-    api.health().then(setH).catch(() => setH({ ok: false }))
-  }, [])
-  const L = locale === 'fr'
-  return (
-    <div className="home">
-      <img className="mark" src={mark} alt="Lumnia" />
-      <h1>
-        {L ? 'Intelligence opérationnelle vérifiée' : 'Verified operating intelligence'}
-      </h1>
-      <p>
-        {L
-          ? "Chaque chiffre publié ici porte l'adresse de la cellule dont il provient. Un rapport s'ouvre avec le lien que vous avez reçu."
-          : 'Every figure published here carries the address of the cell it came from. A report opens with the link you were sent.'}
-      </p>
-      <div className="status">
-        {h?.ok ? (
-          <>
-            <span className="dot" />
-            <span>API {h.version}</span>
-            <span>·</span>
-            <span>
-              {h.orgs} {L ? 'clients' : 'clients'}
-            </span>
-            <span>·</span>
-            <span>
-              {h.reports} {L ? 'rapports' : 'reports'}
-            </span>
-            {!h.publishing_enabled && (
-              <>
-                <span>·</span>
-                <span className="warn">
-                  {L ? 'publication désactivée' : 'publishing disabled'}
-                </span>
-              </>
-            )}
-          </>
+      {route.view === 'home' &&
+        (session ? (
+          <ClientHome session={session} locale={locale} onSignOut={signOut} />
         ) : (
-          <span className="warn">{L ? "l'API ne répond pas" : 'API not responding'}</span>
-        )}
-      </div>
+          <Landing onSignIn={signIn} />
+        ))}
     </div>
   )
 }
@@ -226,7 +215,7 @@ function PortalPage({ id, shareKey, locale }) {
 
 /* ---------------------------------------------------------------- viewer */
 
-function Viewer({ id, shareKey, locale }) {
+function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
   const [rep, setRep] = useState(null)
   const [err, setErr] = useState(null)
   const [lens, setLens] = useState('doc')
@@ -235,8 +224,14 @@ function Viewer({ id, shareKey, locale }) {
     setRep(null)
     setErr(null)
     setLens('doc')
-    api.getReport(id, shareKey).then(setRep).catch(setErr)
-  }, [id, shareKey])
+    // Same document either way. What differs is who is asking: a key in the
+    // link, or the session of a client who signed in.
+    const load = mine ? api.getMyReport(id) : api.getReport(id, shareKey)
+    load.then(setRep).catch((e) => {
+      if (mine && e.status === 401) onExpired?.()
+      else setErr(e)
+    })
+  }, [id, shareKey, mine])
 
   // Tabs, bookmarks and shared links deserve the report's name, not ours.
   useEffect(() => {

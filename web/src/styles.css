@@ -475,3 +475,182 @@ td.pos{color:var(--gold)}
   .lg-r{grid-template-columns:1fr 1fr}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ------------------------------------------------------------------ landing
+   The public page. Same tokens as the rest of the platform — the design and
+   the product were drawn from one palette, so nothing here invents a colour.
+   Laid out in real CSS rather than the inline attributes it arrived as: a
+   style attribute cannot hold a media query, and this page has to survive a
+   phone in Kinshasa as well as a laptop. */
+.ld{background:var(--ground)}
+.ld-wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+.ld a{color:inherit;text-decoration:none}
+.ld h1,.ld h2,.ld h3{font-weight:inherit}
+
+.ld-nav{position:sticky;top:0;z-index:50;background:rgba(11,25,16,.82);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line-soft)}
+.ld-nav-in{display:flex;align-items:center;justify-content:space-between;height:68px;gap:20px}
+.ld-brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
+.ld-brand img{width:34px;height:34px;object-fit:contain}
+.ld-brand span{font-family:var(--serif);font-weight:400;font-size:19px;line-height:1;
+  letter-spacing:.22em;text-indent:.22em;color:var(--bright)}
+.ld-nav-links{display:flex;align-items:center;gap:28px}
+.ld-nav-links>a{font-family:var(--sans);font-weight:400;font-size:13px;line-height:1;color:var(--mut-7)}
+.ld-nav-links>a:hover{color:var(--bright)}
+.ld-cta{font-family:var(--sans);font-weight:500;font-size:13px;line-height:1;
+  color:var(--ground);background:var(--gold);padding:10px 18px;border-radius:2px;
+  border:0;cursor:pointer;display:inline-block}
+.ld-cta:hover{background:var(--gold-hover);color:var(--ground)}
+.ld-cta[disabled]{opacity:.6;cursor:default}
+.ld-ghost{border:1px solid var(--line-strong);padding:9px 16px;border-radius:2px}
+.ld-ghost:hover{border-color:var(--gold)}
+.ld-btn{font-family:var(--sans);font-weight:500;font-size:14px;line-height:1;color:var(--ink);
+  border:1px solid var(--line-strong);padding:15px 26px;border-radius:2px}
+.ld-btn:hover{border-color:var(--gold);color:var(--bright)}
+
+.ld-hero{position:relative;overflow:hidden;
+  background:radial-gradient(130% 100% at 50% -8%, rgba(200,168,76,.16) 0%,
+    rgba(200,168,76,.03) 34%, transparent 60%)}
+.ld-hero-in{padding:120px 40px 110px;display:flex;flex-direction:column;
+  align-items:center;text-align:center}
+@keyframes lum{0%,100%{opacity:.85}50%{opacity:1}}
+.ld-lum{width:230px;height:230px;object-fit:contain;margin-bottom:18px;
+  animation:lum 5s ease-in-out infinite}
+.ld-lum-sm{width:96px;height:96px;margin-bottom:24px}
+.ld-hero h1{font-family:var(--serif);font-weight:300;font-size:clamp(38px,7vw,68px);
+  line-height:1.04;letter-spacing:-.01em;max-width:14ch;color:var(--bright)}
+.ld-lede{margin-top:30px;font-family:var(--sans);font-weight:300;font-size:19px;
+  line-height:1.6;color:var(--mut-72);max-width:60ch}
+.ld-actions{display:flex;gap:14px;margin-top:40px;flex-wrap:wrap;justify-content:center}
+.ld-actions .ld-cta{font-size:14px;padding:15px 26px}
+.ld-estd{margin-top:64px;color:var(--mut-4)}
+
+.ld-pale{background:#f5f2ec;color:var(--ground)}
+.ld-stone{background:#ebe7de;color:var(--ground)}
+.ld-dark{background:var(--ground)}
+.ld-rule-t{border-top:1px solid var(--line-soft)}
+.ld-ey-dim{color:var(--mut-4)}
+.ld-pale .ld-ey-dim,.ld-stone .ld-ey-dim{color:var(--gold-dim)}
+.ld-ey-gold{color:var(--gold)}
+
+.ld-split{padding:108px 40px;display:grid;grid-template-columns:1fr 1fr;gap:72px;align-items:center}
+.ld-h2{margin-top:22px;font-family:var(--serif);font-weight:400;
+  font-size:clamp(30px,4.2vw,44px);line-height:1.12;letter-spacing:-.01em}
+.ld-h2-l{font-weight:300;color:var(--bright)}
+.ld-rule-l{border-left:1px solid rgba(11,25,16,.14);padding-left:40px}
+.ld-dark .ld-rule-l,.ld-foot .ld-rule-l{border-left-color:var(--line)}
+.ld-split p{font-family:var(--sans);font-weight:300;font-size:17px;line-height:1.7;color:#3a3a33}
+.ld-split p+p{margin-top:22px}
+
+.ld-dark .ld-wrap{padding-top:0;padding-bottom:0}
+.ld-mid{text-align:center;max-width:62ch;margin:0 auto 70px;padding-top:108px}
+.ld-sub{margin-top:22px;font-family:var(--sans);font-weight:300;font-size:17px;
+  line-height:1.6;color:var(--mut-66);max-width:56ch;margin-left:auto;margin-right:auto}
+.ld-sub-l{margin-left:0;margin-right:0}
+.ld-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;padding-bottom:108px}
+.ld-card{border:1px solid var(--line);border-radius:4px;padding:36px 30px;background:var(--panel)}
+.ld-card.lit{border-color:rgba(200,168,76,.3);background:rgba(200,168,76,.06)}
+.ld-card .ey{color:rgba(200,168,76,.7)}
+.ld-card.lit .ey{color:var(--gold)}
+.ld-card h3{margin-top:18px;font-family:var(--sans);font-weight:500;font-size:22px;
+  line-height:1.2;color:var(--bright)}
+.ld-card p{margin-top:12px;font-family:var(--sans);font-weight:300;font-size:15px;
+  line-height:1.65;color:var(--mut-6)}
+
+.ld-rule-band{padding:90px 40px;text-align:center}
+.ld-maxim{margin:24px auto 0;font-family:var(--serif);font-weight:300;
+  font-size:clamp(23px,3.2vw,32px);line-height:1.4;color:var(--bright);max-width:30ch}
+
+.ld-pillars{padding:100px 40px;display:grid;grid-template-columns:repeat(3,1fr)}
+.ld-pillar{padding-right:44px}
+.ld-pillar+.ld-pillar{padding:0 44px;border-left:1px solid rgba(11,25,16,.12)}
+.ld-pillar:last-child{padding-right:0;padding-left:44px}
+.ld-mark{width:34px;height:34px;border-radius:50%;border:1px solid rgba(11,25,16,.3);
+  display:flex;align-items:center;justify-content:center;margin-bottom:22px}
+.ld-dot.a{width:7px;height:7px;border-radius:50%;background:var(--gold-dim)}
+.ld-dot.b{width:14px;height:14px;border-radius:50%;border:1px solid var(--gold-dim)}
+.ld-dot.c{width:14px;height:14px;border-radius:50%;background:var(--gold-dim);
+  box-shadow:0 0 12px 3px rgba(168,132,46,.4)}
+.ld-pillar h3{font-family:var(--serif);font-weight:400;font-size:26px;line-height:1.1}
+.ld-pillar p{margin-top:12px;font-family:var(--sans);font-weight:300;font-size:15px;
+  line-height:1.65;color:#56564d}
+
+.ld-proof-head{display:flex;align-items:flex-end;justify-content:space-between;gap:40px;
+  margin-bottom:44px;flex-wrap:wrap;padding-top:108px}
+.ld-proof-head>div:first-child{max-width:52ch}
+.ld-stats{display:flex;gap:30px}
+.ld-stat{font-family:var(--serif);font-weight:400;font-size:30px;line-height:1;color:var(--gold)}
+.ld-stats .ey{margin-top:7px}
+.ld-shot{position:relative;border:1px solid var(--line);border-radius:6px;
+  background:repeating-linear-gradient(135deg,rgba(235,231,222,.04) 0 12px,transparent 12px 24px);
+  aspect-ratio:16/8;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px;text-align:center;padding:20px}
+.ld-shot .ey{color:var(--mut-42)}
+.ld-shot-sub{font-family:var(--sans);font-weight:300;font-size:14px;line-height:1.5;color:var(--mut-34)}
+.ld-caps{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;margin-top:30px;
+  padding-bottom:108px}
+.ld-caps p{margin-top:9px;font-family:var(--sans);font-weight:300;font-size:13px;
+  line-height:1.55;color:var(--mut-5)}
+
+.ld-market{padding:96px 40px;display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:40px;
+  align-items:end}
+.ld-big{font-family:var(--serif);font-weight:300;font-size:clamp(48px,7vw,76px);
+  line-height:.96;margin-top:18px}
+.ld-med{font-family:var(--serif);font-weight:300;font-size:40px;line-height:1}
+.ld-market p{margin-top:14px;font-family:var(--sans);font-weight:300;font-size:16px;
+  line-height:1.6;color:#56564d;max-width:34ch}
+.ld-market .ld-rule-l p{font-size:14px;line-height:1.5;margin-top:10px}
+
+.ld-signin{padding:100px 40px;display:grid;grid-template-columns:1fr 1fr;gap:72px;
+  align-items:center}
+.ld-form{display:flex;flex-direction:column;gap:18px;max-width:380px;width:100%}
+.ld-form label{display:flex;flex-direction:column;gap:8px}
+.ld-form input{font-family:var(--sans);font-size:15px;color:var(--ink);background:var(--well);
+  border:1px solid var(--line-input);border-radius:2px;padding:13px 14px;width:100%}
+.ld-form input:focus{outline:none;border-color:var(--gold)}
+.ld-err{font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--terracotta)}
+.ld-cta-lg{font-size:14px;padding:15px 30px;text-align:center}
+
+.ld-foot{background:var(--ground);border-top:1px solid var(--line-soft)}
+.ld-foot .ld-wrap{padding:104px 40px 56px}
+.ld-foot-in{display:flex;flex-direction:column;align-items:center;text-align:center}
+.ld-foot-in .ld-h2{max-width:20ch}
+.ld-foot-in .ld-cta{margin-top:34px}
+.ld-foot-bar{display:flex;align-items:center;justify-content:space-between;margin-top:96px;
+  padding-top:30px;border-top:1px solid var(--line-soft);flex-wrap:wrap;gap:18px}
+.ld-foot-bar .ld-brand img{width:26px;height:26px}
+.ld-foot-bar .ld-brand span{font-size:15px;letter-spacing:.2em;text-indent:.2em}
+
+/* A landing page nobody can read on a phone is a landing page nobody reads:
+   most of this market opens links on a handset. */
+@media (max-width:900px){
+  .ld-wrap{padding:0 22px}
+  /* On a phone the nav has one job: get a returning client signed in. The
+     pilot request is already the first button in the hero, two thumb-widths
+     below, so putting it up here too only crowds the header. */
+  .ld-nav-links{gap:12px}
+  .ld-nav-links>a:not(.ld-ghost){display:none}
+  .ld-ghost{font-size:12px;padding:8px 14px}
+  .ld-hero-in{padding:72px 22px 64px}
+  .ld-lum{width:150px;height:150px}
+  .ld-split,.ld-signin{grid-template-columns:1fr;gap:34px;padding:68px 22px}
+  .ld-rule-l{border-left:0;border-top:1px solid rgba(11,25,16,.14);padding-left:0;padding-top:26px}
+  .ld-dark .ld-rule-l{border-top-color:var(--line)}
+  .ld-mid{padding-top:68px;margin-bottom:44px}
+  .ld-cards,.ld-caps{grid-template-columns:1fr;padding-bottom:68px}
+  .ld-pillars{grid-template-columns:1fr;padding:68px 22px;gap:34px}
+  .ld-pillar,.ld-pillar+.ld-pillar,.ld-pillar:last-child{padding:0;border-left:0}
+  .ld-pillar+.ld-pillar{border-top:1px solid rgba(11,25,16,.12);padding-top:34px}
+  .ld-market{grid-template-columns:1fr;padding:68px 22px;gap:34px;align-items:start}
+  .ld-proof-head{padding-top:68px}
+  .ld-foot .ld-wrap{padding:68px 22px 40px}
+  .ld-foot-bar{margin-top:56px}
+  .ld-estd{margin-top:44px;font-size:9.5px;letter-spacing:.22em}
+}
+
+/* Sign out sits in the client's own header, beside the chips that say who
+   they are — the one control on that page that is not a report. */
+.ch-out{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--mut-5);background:none;border:0;cursor:pointer;
+  padding:0;text-decoration:underline;text-underline-offset:3px}
+.ch-out:hover{color:var(--gold)}
