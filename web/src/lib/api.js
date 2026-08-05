@@ -100,3 +100,75 @@ export const shareUrl = (rep) =>
 /** Portal URL for a client — one link, every published report behind it. */
 export const portalUrl = (org) =>
   `${location.origin}${location.pathname}#/c/${org.id}?k=${org.share_key}`
+
+/* ---------------------------------------------------------------- clients
+   A client session is a different principal from the author token: separate
+   storage key, separate header, and it must never be sent to /studio. */
+const SESSION_KEY = 'lumnia.session'
+
+export const getSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const s = JSON.parse(raw)
+    // Expiry is checked here so a stale tab shows the sign-in form rather
+    // than a list of reports that all 401 when clicked.
+    if (!s?.token || (s.expires_at ?? 0) * 1000 < Date.now()) return null
+    return s
+  } catch {
+    return null
+  }
+}
+
+export const setSession = (s) => {
+  try {
+    if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s))
+    else localStorage.removeItem(SESSION_KEY)
+  } catch {
+    // private browsing: the session lives for this page load only
+  }
+}
+
+const sessionHeaders = () => {
+  const s = getSession()
+  return s ? { Authorization: `Bearer ${s.token}` } : {}
+}
+
+export const login = (username, password) =>
+  req('/auth/login', { method: 'POST', body: { username, password } })
+
+export const whoami = () => reqAs('/auth/me', sessionHeaders())
+export const myReports = () => reqAs('/me/reports', sessionHeaders())
+
+/** A report opened by a signed-in client: no key in the URL, no key in the
+ *  browser history, the session says who they are. */
+export const getMyReport = (id) => reqAs(`/reports/${id}`, sessionHeaders())
+
+async function reqAs(path, headers) {
+  const r = await fetch(`${BASE}${path}`, { headers })
+  const text = await r.text()
+  let data
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = text
+  }
+  if (!r.ok) {
+    const e = new Error(typeof data === 'string' ? data : JSON.stringify(data?.detail ?? data))
+    e.status = r.status
+    e.detail = data?.detail ?? data
+    throw e
+  }
+  return data
+}
+
+/* ------------------------------------------------- author: client logins */
+export const listOrgUsers = (id) => req(`/studio/orgs/${id}/users`, { auth: true })
+export const createOrgUser = (id, username, password) =>
+  req(`/studio/orgs/${id}/users`, { method: 'POST', body: { username, password }, auth: true })
+export const setUserPassword = (username, password) =>
+  req(`/studio/users/${username}/password`, { method: 'PUT', body: { password }, auth: true })
+export const setUserDisabled = (username, disabled) =>
+  req(`/studio/users/${username}/disable?disabled=${disabled}`, { method: 'POST', auth: true })
+export const deleteUser = (username) =>
+  req(`/studio/users/${username}`, { method: 'DELETE', auth: true })

@@ -265,6 +265,52 @@ class Org(BaseModel):
     report_count: int = 0
 
 
+class ClientUser(BaseModel):
+    """A client login, as anyone outside the store is allowed to see it.
+
+    There is deliberately no field for the password hash. A response model
+    cannot leak what it has nowhere to put.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    username: str
+    org: str
+    created_at: str
+    last_seen: str | None = None
+    disabled: bool = False
+
+
+class UserIn(BaseModel):
+    """What an author posts to issue a client login."""
+
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,38}$")
+    # 10 is not a strong password on its own, but this one is issued by a
+    # human and handed over once, not chosen under time pressure at signup.
+    password: str = Field(min_length=10, max_length=200)
+
+
+class PasswordIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    password: str = Field(min_length=10, max_length=200)
+
+
+class LoginIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(min_length=1, max_length=40)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class Session(BaseModel):
+    """What a successful sign-in returns."""
+
+    model_config = ConfigDict(extra="forbid")
+    token: str
+    expires_at: int
+    user: ClientUser
+    org: Org
+
+
 class SeriesDef(BaseModel):
     """Where a monthly series lives: a sheet, and the label of its row. The
     series is every numeric cell across that row, left to right. `skip`

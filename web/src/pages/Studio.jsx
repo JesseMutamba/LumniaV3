@@ -25,6 +25,9 @@ export default function Studio({ locale, onPublished }) {
   const [ctxMeta, setCtxMeta] = useState(null)
   const [ctxErr, setCtxErr] = useState(null)
   const [reads, setReads] = useState(null)
+  const [usersOrg, setUsersOrg] = useState(null)
+  const [users, setUsers] = useState(null)
+  const [newUser, setNewUser] = useState({ username: '', password: '' })
 
   useEffect(() => {
     setReads(null)
@@ -182,6 +185,62 @@ export default function Studio({ locale, onPublished }) {
   const editable = (c) => {
     const { version, updated_at, ...doc } = c
     return doc
+  }
+
+  const loadUsers = (org) =>
+    api.listOrgUsers(org).then(setUsers).catch(() => setUsers([]))
+
+  async function openUsers(o) {
+    if (usersOrg === o.id) {
+      setUsersOrg(null)
+      return
+    }
+    setUsersOrg(o.id)
+    setUsers(null)
+    setNewUser({ username: `${o.id}-`, password: '' })
+    loadUsers(o.id)
+  }
+
+  /** A password you would not have thought of, which is the point. Generated
+   *  in the browser and never stored here — you copy it out and hand it over. */
+  function suggestPassword() {
+    const bytes = new Uint8Array(12)
+    crypto.getRandomValues(bytes)
+    const pw = btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, '').slice(0, 14)
+    setNewUser((u) => ({ ...u, password: pw }))
+  }
+
+  async function addUser(e) {
+    e.preventDefault()
+    const ok = await run(() =>
+      api.createOrgUser(usersOrg, newUser.username.trim(), newUser.password)
+    )
+    if (ok) {
+      // The password is shown once, here, because after this request nobody
+      // — including this platform — can read it back.
+      alert(
+        (L ? 'Accès créé.\n\nIdentifiant : ' : 'Login created.\n\nUsername: ') +
+          newUser.username.trim() +
+          (L ? '\nMot de passe : ' : '\nPassword: ') +
+          newUser.password +
+          (L
+            ? "\n\nCopiez-le maintenant : il ne sera plus affiché."
+            : '\n\nCopy it now — it will not be shown again.')
+      )
+      setNewUser({ username: `${usersOrg}-`, password: '' })
+      loadUsers(usersOrg)
+    }
+  }
+
+  async function resetPassword(u) {
+    const pw = prompt(
+      L
+        ? `Nouveau mot de passe pour « ${u.username} » (10 caractères minimum) :`
+        : `New password for “${u.username}” (10 characters minimum):`
+    )
+    if (!pw) return
+    const ok = await run(() => api.setUserPassword(u.username, pw))
+    if (ok) loadUsers(usersOrg)
   }
 
   async function openContext(o) {
@@ -721,6 +780,11 @@ export default function Studio({ locale, onPublished }) {
                 <button className="link" onClick={() => openContext(o)}>
                   {ctxOrg === o.id ? (L ? 'fermer' : 'close') : (L ? 'contexte' : 'context')}
                 </button>
+                <button className="link" onClick={() => openUsers(o)}>
+                  {usersOrg === o.id
+                    ? L ? 'fermer' : 'close'
+                    : L ? 'accès' : 'logins'}
+                </button>
                 {/* Only offered where it is safe: a client holding a report is
                     refused by the API anyway, since somebody holds that link. */}
                 {o.report_count === 0 && (
@@ -738,6 +802,79 @@ export default function Studio({ locale, onPublished }) {
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {usersOrg && (
+          <div className="ctx">
+            <div className="ctx-h">
+              <b>{L ? 'Accès client' : 'Client logins'}</b>
+              <span className="muted">{usersOrg}</span>
+            </div>
+            <p className="fine">
+              {L
+                ? "Vous créez l'identifiant et transmettez le mot de passe une seule fois. Il n'est pas récupérable ensuite, seulement remplaçable — il n'y a pas d'e-mail de réinitialisation."
+                : 'You create the login and hand the password over once. It is not recoverable afterwards, only replaceable — there is no reset email.'}
+            </p>
+            {users?.length === 0 && (
+              <p className="fine">
+                {L ? 'Aucun accès pour ce client.' : 'No logins for this client yet.'}
+              </p>
+            )}
+            <div className="org-list">
+              {(users ?? []).map((u) => (
+                <div key={u.username} className="org-row">
+                  <span className="mono">{u.username}</span>
+                  <span className="muted">
+                    {u.disabled
+                      ? L ? 'désactivé' : 'disabled'
+                      : u.last_seen
+                        ? `${L ? 'vu le' : 'seen'} ${String(u.last_seen).slice(0, 10)}`
+                        : L ? 'jamais connecté' : 'never signed in'}
+                  </span>
+                  <button className="link" onClick={() => resetPassword(u)}>
+                    {L ? 'nouveau mot de passe' : 'new password'}
+                  </button>
+                  <button
+                    className="link"
+                    onClick={() =>
+                      run(() => api.setUserDisabled(u.username, !u.disabled)).then(() =>
+                        loadUsers(usersOrg)
+                      )
+                    }
+                  >
+                    {u.disabled ? (L ? 'réactiver' : 'enable') : L ? 'désactiver' : 'disable'}
+                  </button>
+                  <button
+                    className="link"
+                    onClick={() => {
+                      const msg = L
+                        ? `Supprimer l'accès « ${u.username} » ? Désactiver conserve la trace des lectures.`
+                        : `Delete the login “${u.username}”? Disabling keeps its read history attached to a name.`
+                      if (confirm(msg))
+                        run(() => api.deleteUser(u.username)).then(() => loadUsers(usersOrg))
+                    }}
+                  >
+                    {L ? 'supprimer' : 'delete'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <form className="org-new" onSubmit={addUser}>
+              <input
+                placeholder={L ? 'identifiant' : 'username'}
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+              />
+              <input
+                placeholder={L ? 'mot de passe (10 caractères min.)' : 'password (10 chars min.)'}
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+              />
+              <button className="link" type="button" onClick={suggestPassword}>
+                {L ? 'proposer' : 'suggest'}
+              </button>
+              <button disabled={busy}>{L ? 'créer' : 'create'}</button>
+            </form>
           </div>
         )}
         {ctxOrg && (

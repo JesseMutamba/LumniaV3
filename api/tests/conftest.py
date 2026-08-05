@@ -3,6 +3,10 @@ from pathlib import Path
 
 os.environ["LUMNIA_ADMIN_TOKEN"] = "test-token"
 os.environ["LUMNIA_BOOTSTRAP_ORGS"] = ""
+# The sign-in limiter counts per IP, and the whole suite shares one. Give
+# it headroom here; test_login_lockout lowers it deliberately to prove it
+# still bites.
+os.environ["LUMNIA_LOGIN_LIMIT"] = "10000"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # isolate the test database before anything imports store

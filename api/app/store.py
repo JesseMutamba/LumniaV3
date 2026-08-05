@@ -11,7 +11,9 @@ import os
 import sqlite3
 from pathlib import Path
 
-from .schema import Context, ContextIn, ContextVersion, Org, Report, ReportStub, Text
+from .schema import (
+    ClientUser, Context, ContextIn, ContextVersion, Org, Report, ReportStub, Text,
+)
 
 # LUMNIA_DB lets a container point this at a mounted volume so reports
 # survive a redeploy. Local development falls back to a file in api/.
@@ -74,6 +76,16 @@ CREATE TABLE IF NOT EXISTS runs (
   sources TEXT                 -- json sources, so kept blocks still name their files
 );
 CREATE INDEX IF NOT EXISTS runs_org ON runs(org, ts);
+CREATE TABLE IF NOT EXISTS users (
+  username   TEXT PRIMARY KEY,   -- what they type; unique across all clients
+  org        TEXT NOT NULL REFERENCES orgs(id),
+  pw_hash    TEXT NOT NULL,      -- PBKDF2-HMAC-SHA256, never the password
+  pw_salt    TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen  TEXT,
+  disabled   INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS users_org ON users(org);
 CREATE TABLE IF NOT EXISTS reads (
   ts     TEXT NOT NULL,
   kind   TEXT NOT NULL,        -- 'report' | 'portal'
@@ -176,10 +188,93 @@ def delete_org(org_id: str) -> bool:
         ).fetchone()["n"]
         if n:
             raise ValueError(f"{org_id} still holds {n} report(s)")
-        for table in ("contexts", "ingestions", "tiles", "files", "runs"):
+        for table in ("contexts", "ingestions", "tiles", "files", "runs", "users"):
             con.execute(f"DELETE FROM {table} WHERE org = ?", (org_id,))
         con.execute("DELETE FROM orgs WHERE id = ?", (org_id,))
     return True
+
+
+# --------------------------------------------------------------------------
+# client accounts. The hash never leaves this module by accident: every
+# reader here returns a ClientUser, which has no field to put it in.
+# --------------------------------------------------------------------------
+
+def put_user(username: str, org_id: str, pw_hash: str, pw_salt: str) -> ClientUser:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        con.execute(
+            "INSERT INTO users (username,org,pw_hash,pw_salt,created_at) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(username) DO UPDATE SET "
+            "  org=excluded.org, pw_hash=excluded.pw_hash, pw_salt=excluded.pw_salt",
+            (username, org_id, pw_hash, pw_salt, now),
+        )
+    user = get_user(username)
+    assert user is not None  # just written
+    return user
+
+
+def get_user(username: str) -> ClientUser | None:
+    with connect() as con:
+        r = con.execute(
+            "SELECT username, org, created_at, last_seen, disabled FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+    if not r:
+        return None
+    return ClientUser(
+        username=r["username"], org=r["org"], created_at=r["created_at"],
+        last_seen=r["last_seen"], disabled=bool(r["disabled"]),
+    )
+
+
+def get_user_secret(username: str) -> tuple[str, str] | None:
+    """(hash, salt) for the sign-in check. The only reader that sees them."""
+    with connect() as con:
+        r = con.execute(
+            "SELECT pw_hash, pw_salt FROM users WHERE username = ?", (username,)
+        ).fetchone()
+    return (r["pw_hash"], r["pw_salt"]) if r else None
+
+
+def list_users(org_id: str | None = None) -> list[ClientUser]:
+    q = "SELECT username, org, created_at, last_seen, disabled FROM users"
+    args: tuple = ()
+    if org_id:
+        q += " WHERE org = ?"
+        args = (org_id,)
+    with connect() as con:
+        rows = con.execute(q + " ORDER BY username", args).fetchall()
+    return [
+        ClientUser(username=r["username"], org=r["org"], created_at=r["created_at"],
+                   last_seen=r["last_seen"], disabled=bool(r["disabled"]))
+        for r in rows
+    ]
+
+
+def set_user_disabled(username: str, disabled: bool) -> bool:
+    with connect() as con:
+        cur = con.execute(
+            "UPDATE users SET disabled = ? WHERE username = ?", (1 if disabled else 0, username)
+        )
+    return cur.rowcount > 0
+
+
+def delete_user(username: str) -> bool:
+    with connect() as con:
+        cur = con.execute("DELETE FROM users WHERE username = ?", (username,))
+    return cur.rowcount > 0
+
+
+def touch_user(username: str) -> None:
+    from datetime import datetime, timezone
+
+    with connect() as con:
+        con.execute(
+            "UPDATE users SET last_seen = ? WHERE username = ?",
+            (datetime.now(timezone.utc).isoformat(), username),
+        )
 
 
 # --------------------------------------------------------------------------
