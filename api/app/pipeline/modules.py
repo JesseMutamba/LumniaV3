@@ -278,9 +278,9 @@ def _run_reconciliation(wbs: list[Workbook], tables, ctx, extras) -> list:
         ),
         Table(
             columns=[
-                {"key": "date", "label": Text(fr="Date"), "align": "left"},
-                {"key": "amount", "label": Text(fr="Montant"), "align": "right"},
-                {"key": "also", "label": Text(fr="Aussi dans"), "align": "right"},
+                {"key": "date", "label": Text(fr="Date", en="Date"), "align": "left"},
+                {"key": "amount", "label": Text(fr="Montant", en="Amount"), "align": "right"},
+                {"key": "also", "label": Text(fr="Aussi dans", en="Also in"), "align": "right"},
             ],
             rows=rows,
         ),
