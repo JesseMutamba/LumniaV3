@@ -29,9 +29,34 @@ function parseHash() {
   return { view: 'home' }
 }
 
+/**
+ * English is the platform's language. A reader who switches keeps their
+ * choice — PVAK's stakeholders read French, and being flipped back on every
+ * visit is the kind of small rudeness that makes a tool feel foreign.
+ */
+const LOCALE_KEY = 'lumnia.locale'
+const firstLocale = () => {
+  try {
+    const saved = localStorage.getItem(LOCALE_KEY)
+    if (saved === 'fr' || saved === 'en') return saved
+  } catch {
+    // private browsing denies storage; the default is still right
+  }
+  return 'en'
+}
+
 export default function App() {
   const [route, setRoute] = useState(parseHash)
-  const [locale, setLocale] = useState('fr')
+  const [locale, setLocale] = useState(firstLocale)
+
+  const chooseLocale = (l) => {
+    setLocale(l)
+    try {
+      localStorage.setItem(LOCALE_KEY, l)
+    } catch {
+      // nothing to do; the session still switches
+    }
+  }
 
   useEffect(() => {
     const on = () => setRoute(parseHash())
@@ -60,7 +85,7 @@ export default function App() {
         )}
         <div className="lang" role="group" aria-label="Locale">
           {['fr', 'en'].map((l) => (
-            <button key={l} aria-pressed={locale === l} onClick={() => setLocale(l)}>
+            <button key={l} aria-pressed={locale === l} onClick={() => chooseLocale(l)}>
               {l.toUpperCase()}
             </button>
           ))}
