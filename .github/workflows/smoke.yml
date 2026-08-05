@@ -112,19 +112,23 @@ jobs:
       - name: The deployed build is the current one
         run: |
           # "It looks the same" is usually a stale deploy or a cached page.
-          # Assert against the API's own route list, which cannot be cached
-          # by a browser: the ask surface exists only in the current build.
+          # Assert against the API's own route list, which no browser can
+          # cache. The expected routes are read out of this commit rather
+          # than listed by hand: a hardcoded list goes stale silently, which
+          # is the exact failure this step exists to catch.
           curl -sS -m 30 https://lumnia-api-lkfg.onrender.com/openapi.json -o api.json
           python3 - <<'PY'
-          import json, sys
-          spec = json.load(open("api.json"))
-          paths = set(spec.get("paths", {}))
-          want = ["/v1/studio/ask", "/v1/studio/orgs/{org_id}/tiles",
-                  "/v1/studio/orgs/{org_id}/timeline", "/v1/studio/dashboard"]
-          missing = [p for p in want if p not in paths]
+          import json, re, sys, pathlib
+          want = set()
+          for f in pathlib.Path("api/app/routers").glob("*.py"):
+              for m in re.finditer(r'@router\.(get|post|put|delete|patch)\(\s*\n?\s*"([^"]+)"',
+                                   f.read_text()):
+                  want.add("/v1" + m.group(2))
+          live = set(json.load(open("api.json")).get("paths", {}))
+          missing = sorted(want - live)
+          print("defined:", len(want), "| live:", len(live))
           if missing:
-              print("stale deploy - missing routes:", missing)
-              print("deployed routes:", sorted(paths))
+              print("STALE DEPLOY - the running service is missing:", missing)
               sys.exit(1)
-          print("current build deployed; ask surface live")
+          print("current build deployed; every route this commit defines answers")
           PY
