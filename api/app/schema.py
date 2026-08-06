@@ -16,7 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # --------------------------------------------------------------------------
 
 Locale = Literal["fr", "en"]
-Unit = Literal["USD", "CDF", "t", "ha", "pct", "ratio", "USD/t", "count", "none"]
+# "year" is a label that happens to be numeric: 2028, never 2,028. Every other
+# unit groups its thousands, which is exactly wrong for a calendar year.
+Unit = Literal["USD", "CDF", "t", "ha", "pct", "ratio", "USD/t", "count", "year", "none"]
 Derived = Literal[
     "read", "sum", "mean", "ratio", "delta", "extrapolation", "simulation"
 ]

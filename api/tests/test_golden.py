@@ -391,3 +391,18 @@ def test_g7_lineage_ends_at_the_number_it_explains(tmp_path):
         for k in _kpis(blocks):
             assert k.lineage, f"{k.label.fr} has no lineage"
             assert k.lineage[-1].n == pytest.approx(k.value.n, abs=0.05)
+
+
+def test_g8_a_year_is_a_label_not_a_quantity():
+    """2028, never 2,028. Every other unit groups its thousands, which is
+    exactly wrong for a calendar year — and a break-even year rendered as
+    '2,028' is the kind of detail that makes a reader doubt the rest."""
+    from app.schema import Value, Src
+
+    v = Value(n=2028, unit="year", src=Src(file=0, sheet="RECAP", cells="D22"))
+    assert v.unit == "year"
+    # the renderer's contract, asserted here so the unit cannot be dropped
+    # from the schema without this failing
+    from app.schema import Unit
+    import typing
+    assert "year" in typing.get_args(Unit)

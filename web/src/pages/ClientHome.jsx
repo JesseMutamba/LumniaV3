@@ -27,7 +27,7 @@ export default function ClientHome({ session, locale, onSignOut }) {
   }, [])
 
   return (
-    <div className="doc">
+    <div className="doc inst">
       <div className="rep-head">
         <h1>{session.org.name}</h1>
         <div className="meta">

@@ -97,11 +97,14 @@ export default function App() {
   // the platform bar — and a language toggle with nothing to toggle — would
   // be two headers arguing with each other.
   const bare = route.view === 'home' && !session
+  // A cream document under a dark green bar is two designs meeting at a
+  // hard edge. Reader surfaces get a header in their own key.
+  const reading = ['report', 'myreport', 'portal'].includes(route.view) || !!session
 
   return (
     <div className="shell">
       {!bare && (
-        <div className="top">
+        <div className={`top${reading ? ' inst' : ''}`}>
           <a className="brand" href="#/">
             <img src={mark} alt="" />
             <span>Lumnia</span>
@@ -158,7 +161,7 @@ function PortalPage({ id, shareKey, locale }) {
 
   if (err)
     return (
-      <div className="doc">
+      <div className="doc inst">
         <div className="gone">
           <div className="ic">⌖</div>
           <h2>{L ? 'Lien introuvable ou expiré' : 'Link not found or expired'}</h2>
@@ -171,10 +174,10 @@ function PortalPage({ id, shareKey, locale }) {
       </div>
     )
 
-  if (!portal) return <div className="doc skel">…</div>
+  if (!portal) return <div className="doc inst skel">…</div>
 
   return (
-    <div className="doc">
+    <div className="doc inst">
       <div className="rep-head">
         <h1>{portal.org.name}</h1>
         <div className="meta">
@@ -279,7 +282,7 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
 
   if (err)
     return (
-      <div className="doc">
+      <div className="doc inst">
         <div className="gone">
           <div className="ic">⌖</div>
           <h2>
@@ -304,10 +307,10 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
       </div>
     )
 
-  if (!rep) return <div className="doc skel">…</div>
+  if (!rep) return <div className="doc inst skel">…</div>
 
   return (
-    <div className="doc">
+    <div className="doc inst">
       <div className="rep-head">
         <h1>{t(rep.title, locale)}</h1>
         <div className="meta">

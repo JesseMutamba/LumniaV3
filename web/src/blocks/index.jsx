@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Prov from './Prov.jsx'
 import { fmt, signed, t, nf, MONTHS } from '../lib/format.js'
 
@@ -137,27 +137,70 @@ const Rail = ({ b, locale, sources }) => (
   </div>
 )
 
+
+/* ------------------------------------------------------------- tooltips
+   SVG's own <title> waits about a second, cannot be styled, and never
+   appears on a touch screen. A chart whose numbers are only available to a
+   patient reader with a mouse is a chart that does not show its numbers.
+
+   Pointer events rather than mouse events, so a tap on a phone works the
+   same way as a hover on a laptop. */
+function useTip() {
+  const box = useRef(null)
+  const [tip, setTip] = useState(null)
+  const show = (e, rows) => {
+    const r = box.current?.getBoundingClientRect()
+    if (!r) return
+    setTip({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, rows })
+  }
+  return { box, tip, show, hide: () => setTip(null) }
+}
+
+function Tip({ tip }) {
+  if (!tip) return null
+  // Clamped so a bar at either edge does not push the box out of the card.
+  const left = Math.min(Math.max(tip.x, 66), tip.w - 66)
+  return (
+    <div className="tip" style={{ left, top: tip.y }} role="status">
+      {tip.rows.map((r, i) => (
+        <div key={i} className={i === 0 ? 'tip-k' : 'tip-r'}>
+          {i === 0 ? r : (<><span>{r[0]}</span><b>{r[1]}</b></>)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* --------------------------------------------------------------- barPair */
 
 function BarPair({ b, locale, sources }) {
+  const { box, tip, show, hide } = useTip()
   const x = b.x === 'months' ? MONTHS[locale] : b.x
   const [plan, act] = b.series
   const vals = (s) => (s ? s.values.map((v) => v.n) : [])
   const W = 960,
     H = 248,
     P = { t: 16, r: 10, b: 26, l: 56 }
-  const max = Math.max(...vals(plan), ...vals(act)) * 1.12
   const iw = W - P.l - P.r,
     ih = H - P.t - P.b
   const bw = iw / x.length,
     gap = bw * 0.22,
     w = (bw - gap) / 2
-  const y = (v) => P.t + ih - (v / max) * ih
+  // A balance row goes negative, and a bar clamped to zero height reads as
+  // "nothing happened" rather than "we lost money". The scale carries zero
+  // whenever any value is below it.
+  const all = [...vals(plan), ...vals(act)]
+  const hi = Math.max(0, ...all) * 1.12
+  const lo = Math.min(0, ...all) * 1.12
+  const span = hi - lo || 1
+  const y = (v) => P.t + ih - ((v - lo) / span) * ih
+  const zero = y(0)
   const lab = (v) => (b.fmt === 'k' ? `${nf(v / 1000, locale)}k` : nf(v, locale))
 
   return (
     <div className="b">
-      <div className="card">
+      <div className="card chart" ref={box}>
+        <Tip tip={tip} />
         <div className="card-h">
           <span>
             {t(b.title, locale)}
@@ -178,7 +221,7 @@ function BarPair({ b, locale, sources }) {
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t(b.title, locale)}>
           {[1, 2, 3, 4].map((i) => {
-            const v = (max * i) / 4
+            const v = lo + (span * i) / 4
             return (
               <g key={i}>
                 <line className="gl" x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} />
@@ -188,8 +231,8 @@ function BarPair({ b, locale, sources }) {
               </g>
             )
           })}
-          <line className="base" x1={P.l} x2={W - P.r} y1={P.t + ih} y2={P.t + ih} />
-          <text className="ax" x={P.l - 8} y={P.t + ih + 3.5} textAnchor="end">
+          <line className="base" x1={P.l} x2={W - P.r} y1={zero} y2={zero} />
+          <text className="ax" x={P.l - 8} y={zero + 3.5} textAnchor="end">
             {lab(0)}
           </text>
           {x.map((m, i) => {
@@ -199,14 +242,28 @@ function BarPair({ b, locale, sources }) {
             return (
               <g key={m + i}>
                 {p !== undefined && (
-                  <rect x={x0} y={y(p)} width={w} height={Math.max(0, P.t + ih - y(p))} className="bar-plan">
-                    <title>{`${m} · ${t(plan?.label, locale) || 'Budget'} : ${nf(p, locale)}`}</title>
-                  </rect>
+                  <rect
+                    x={x0}
+                    y={Math.min(y(p), zero)}
+                    width={w}
+                    height={Math.max(1, Math.abs(zero - y(p)))}
+                    className={`bar-plan ${p < 0 ? 'neg' : ''}`}
+                    onPointerEnter={(e) => show(e, [m, [t(plan?.label, locale) || 'Budget', fmt(plan.values[i], locale)]])}
+                    onPointerMove={(e) => show(e, [m, [t(plan?.label, locale) || 'Budget', fmt(plan.values[i], locale)]])}
+                    onPointerLeave={hide}
+                  />
                 )}
                 {a !== undefined && (
-                  <rect x={x0 + w} y={y(a)} width={w} height={Math.max(0, P.t + ih - y(a))} className="bar-act">
-                    <title>{`${m} · ${t(act?.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')} : ${nf(a, locale)}`}</title>
-                  </rect>
+                  <rect
+                    x={x0 + w}
+                    y={Math.min(y(a), zero)}
+                    width={w}
+                    height={Math.max(1, Math.abs(zero - y(a)))}
+                    className={`bar-act ${a < 0 ? 'neg' : ''}`}
+                    onPointerEnter={(e) => show(e, [m, [t(act?.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual'), fmt(act.values[i], locale)]])}
+                    onPointerMove={(e) => show(e, [m, [t(act?.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual'), fmt(act.values[i], locale)]])}
+                    onPointerLeave={hide}
+                  />
                 )}
                 <text className="ax" x={P.l + i * bw + bw / 2} y={H - 8} textAnchor="middle">
                   {m}
