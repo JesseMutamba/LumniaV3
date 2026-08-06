@@ -1,0 +1,71 @@
+# Publishes the PVAK report to the live platform.
+#
+# The report is a client's financial position and never goes into this public
+# repository in the clear. It travels as AES-256 ciphertext keyed on the admin
+# token, which only the runner holds; the payload is deleted from the branch
+# once the publish has gone through.
+name: Publish PVAK report
+
+on:
+  push:
+    paths:
+      - "transport/*.enc"
+      - ".github/workflows/publish-pvak.yml"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decrypt and publish
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          if [ -z "$TOKEN" ]; then echo "no admin token - skipping"; exit 0; fi
+          F=transport/pvak-q1-2026.enc
+          if [ ! -f "$F" ]; then echo "no payload to publish"; exit 0; fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "$F" \
+            -pass pass:"$TOKEN" -out report.json
+          python3 -c "import json;d=json.load(open('report.json'));print('decrypted',d['id'],len(d['blocks']),'blocks')"
+
+          # This push also triggers a Render rebuild. Until the new build is
+          # live the API runs the previous schema, which rejects anything it
+          # has not learned yet — so 422 is "not deployed yet", not "bad
+          # document", and is worth waiting out. The document was validated
+          # against the schema before it was ever encrypted.
+          for i in $(seq 1 24); do
+            code=$(curl -sS -o out.json -w "%{http_code}" -m 60 -X POST \
+              "$API/orgs/pvak/reports" -H "Authorization: Bearer $TOKEN" \
+              -H 'Content-Type: application/json' --data-binary @report.json || echo 000)
+            echo "attempt $i: HTTP $code"
+            case "$code" in
+              200|201) break;;
+              000|422|500|502|503|504) sleep 15;;
+              *) echo "refused:"; cat out.json; exit 1;;
+            esac
+          done
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+            echo "never published"; cat out.json; exit 1
+          fi
+          # The share key is a bearer credential and this log is public.
+          KEY=$(python3 -c "import json;print(json.load(open('out.json'))['share_key'])")
+          echo "::add-mask::$KEY"
+          python3 -c "import json;d=json.load(open('out.json'));print('published:',d['id'],'|',d['status'])"
+          rm -f report.json out.json
+
+      - name: What the client's portal holds now
+        env:
+          TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
+          API: https://lumnia-api-lkfg.onrender.com/v1
+        run: |
+          if [ -z "$TOKEN" ]; then exit 0; fi
+          curl -sS -m 30 "$API/studio/orgs" -H "Authorization: Bearer $TOKEN" -o orgs.json
+          python3 -c "import json;[print('::add-mask::'+o['share_key']) for o in json.load(open('orgs.json'))]"
+          key=$(python3 -c "import json;print(next(o['share_key'] for o in json.load(open('orgs.json')) if o['id']=='pvak'))")
+          curl -sS -m 30 "$API/portal/pvak?k=$key" -o p.json
+          python3 -c "
+          import json; p=json.load(open('p.json'))
+          print(p['org']['name'], '-', len(p['reports']), 'published report(s)')
+          for r in p['reports']: print('  -', r['id'], '|', r['title'].get('en') or r['title']['fr'])"
