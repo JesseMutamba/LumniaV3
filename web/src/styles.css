@@ -388,23 +388,11 @@ td.pos{color:var(--gold)}
 .lens button+button{border-left:1px solid var(--line-soft)}
 .lens button[aria-selected="true"]{background:var(--well);color:var(--gold)}
 .lens button:hover{color:var(--bright)}
-.db-hero{border:1px solid var(--line);border-left:2px solid var(--gold);border-radius:4px;
-  background:var(--panel);padding:34px 38px;margin-bottom:26px}
-.db-hero[data-tone="warn"],.db-hero[data-tone="bad"]{border-left-color:var(--terracotta)}
-.db-hero .k{font-family:var(--mono);font-weight:500;font-size:10px;line-height:1;
-  letter-spacing:.24em;text-transform:uppercase;color:var(--mut-42);margin-bottom:16px}
-.db-hero .v{font-family:var(--serif);font-weight:300;font-size:76px;line-height:1;
-  color:var(--bright);margin-bottom:14px}
-.db-hero[data-tone="warn"] .v,.db-hero[data-tone="bad"] .v{color:var(--terracotta)}
-.db-hero[data-tone="good"] .v{color:var(--gold)}
-.db-hero .s{font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--mut-6);
-  max-width:560px}
 .db-flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0 22px}
 .db-narr{border:1px solid var(--line-soft);border-radius:4px;background:var(--well);
   padding:24px 28px;margin:8px 0 20px}
 .db-narr .b-prose{margin:0}
 .db .fine{margin-top:8px}
-@media(max-width:900px){.db-hero .v{font-size:54px}}
 
 .dash{border:1px solid var(--line-soft);border-radius:3px;background:var(--well)}
 .dash-row{display:grid;grid-template-columns:1.2fr 1fr 1.2fr 1.2fr 1.4fr auto;gap:16px;
@@ -654,3 +642,111 @@ td.pos{color:var(--gold)}
   text-transform:uppercase;color:var(--mut-5);background:none;border:0;cursor:pointer;
   padding:0;text-decoration:underline;text-underline-offset:3px}
 .ch-out:hover{color:var(--gold)}
+
+/* ------------------------------------------------- institutional report
+   Published reports read as an institutional document: cream ground, white
+   panels, ink on paper. Studio and the landing page stay dark — the author's
+   workshop and the shop window are not the deliverable.
+
+   This is a token remap, not a second stylesheet. Every rule in the report
+   surface above already draws its colour from a variable, so re-pointing the
+   variables restyles all of it and cannot drift out of step with the renderers.
+   Anything that needs more than a colour change is below, and there is little. */
+.doc.inst{
+  --ground:#efece3; --ground-deep:#e7e3d6;
+  --ink:#1c1c18; --bright:#111110;
+  --gold:#b1861c; --gold-hover:#8a6a17; --gold-dim:#8a6a17;
+  --terracotta:#b04a2f;
+  --panel:#fff;
+  --well:#faf8f2;
+  --line:#e3ddcd; --line-soft:#eee9dc; --line-strong:#d6cfb9; --line-input:#d6cfb9;
+  /* the muted ramp inverts: on paper these are greys, not veils over green */
+  --mut-28:rgba(28,28,24,.34); --mut-3:rgba(28,28,24,.36);
+  --mut-34:rgba(28,28,24,.40); --mut-4:rgba(28,28,24,.44);
+  --mut-42:rgba(28,28,24,.46); --mut-5:rgba(28,28,24,.50);
+  --mut-6:rgba(28,28,24,.56); --mut-66:rgba(28,28,24,.60);
+  --mut-7:rgba(28,28,24,.64); --mut-72:rgba(28,28,24,.66);
+  --mut-78:rgba(28,28,24,.70); --mut-82:rgba(28,28,24,.74);
+  /* green carries value on paper where gold carried it on dark */
+  --green:#2f7d3e; --green-d:#1d5730;
+  background:var(--ground); color:var(--ink);
+  max-width:1500px; padding:26px 26px 70px;
+}
+body:has(.doc.inst){background:#efece3}
+.doc.inst .rep-head h1{color:var(--bright);font-size:clamp(22px,2.6vw,30px);font-weight:400}
+.doc.inst .rep-head{margin-bottom:22px}
+.doc.inst .rep-head::after{display:none}
+.doc.inst .chip{background:#fff;border:1px solid var(--line);color:var(--mut-6)}
+.doc.inst .card,.doc.inst .kpi{box-shadow:0 1px 2px rgba(28,28,24,.03)}
+/* KPI value: the figure is the point of the card, so it carries the colour */
+/* The tone class lands on the value, not the card, so the card's edge takes
+   its colour from the value it contains rather than from a duplicated flag. */
+.doc.inst .kpi{border-left:3px solid var(--green)}
+.doc.inst .kpi .v{color:var(--green);font-family:inherit;font-weight:700;
+  font-size:27px;margin-bottom:10px}
+.doc.inst .kpi .v.good{color:var(--green)}
+.doc.inst .kpi .v.warn{color:var(--gold)}
+.doc.inst .kpi .v.bad{color:var(--terracotta)}
+.doc.inst .kpi:has(.v.warn){border-left-color:var(--gold)}
+.doc.inst .kpi:has(.v.bad){border-left-color:var(--terracotta)}
+.doc.inst .kpi .k{color:var(--mut-6);letter-spacing:.11em;font-size:9.5px}
+.doc.inst .kpi .s{font-family:var(--sans);font-size:11.5px;color:var(--mut-6)}
+.doc.inst .b-label{color:var(--mut-6)}
+/* Section tabs read as a document's own navigation, not as chrome */
+.doc.inst .lens{border-bottom:1px solid var(--line);gap:2px}
+.doc.inst .lens button{color:var(--mut-6);border-bottom:2px solid transparent}
+.doc.inst .lens button[aria-selected=true]{color:var(--green-d);font-weight:600;
+  border-bottom-color:var(--green-d);background:none}
+.doc.inst .foot .rule{color:var(--mut-5)}
+@media(max-width:760px){.doc.inst{padding:16px 13px 50px}}
+
+/* Chart tooltip. Replaces SVG <title>, which waits a second before it
+   appears, cannot be styled, and never shows on a touch screen at all. */
+.card.chart{position:relative}
+.tip{position:absolute;transform:translate(-50%,calc(-100% - 12px));pointer-events:none;
+  z-index:5;background:var(--bright);color:var(--ground);border-radius:3px;
+  padding:7px 10px;min-width:120px;box-shadow:0 4px 14px rgba(0,0,0,.18);
+  font-family:var(--mono);font-size:11px;line-height:1.5;white-space:nowrap}
+.tip::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--bright)}
+.tip-k{font-weight:500;letter-spacing:.14em;text-transform:uppercase;font-size:9.5px;
+  opacity:.6;margin-bottom:3px}
+.tip-r{display:flex;gap:16px;justify-content:space-between;align-items:baseline}
+.tip-r b{font-weight:600}
+.doc.inst .tip{background:#1c1c18;color:#f5f2ec}
+.doc.inst .tip::after{border-top-color:#1c1c18}
+/* Bars invite the pointer, so say so. */
+.card.chart rect[class^="bar-"]{transition:opacity .1s}
+.card.chart:hover rect[class^="bar-"]{opacity:.82}
+.card.chart rect[class^="bar-"]:hover{opacity:1}
+
+/* Series colours on paper. The dark theme draws the first series as a ghost
+   outline in cream at 10% alpha — invisible on white, and a single-series
+   chart uses that class for its only bars. Green carries the actual, gold
+   the plan, terracotta anything below zero. */
+.doc.inst .bar-plan{fill:#d8b45c;stroke:none}
+.doc.inst .bar-act{fill:#2f7d3e}
+.doc.inst .bar-plan.neg,.doc.inst .bar-act.neg{fill:var(--terracotta)}
+.doc.inst .sw.plan{background:#d8b45c;border:0}
+.doc.inst .sw.actg{background:#2f7d3e}
+.doc.inst .sw.env{background:#e3ddcd}
+.doc.inst .sw.act{background:#2f7d3e}
+.doc.inst .sw.pace{background:var(--gold)}
+.doc.inst .gl{stroke:var(--line-soft)}
+.doc.inst .ax{fill:var(--mut-5)}
+.doc.inst .base{stroke:#b9b2a0}
+.doc.inst .card-h{color:var(--mut-6)}
+.doc.inst .rail .fill{background:#2f7d3e}
+.doc.inst .rail .bar{background:#efece3}
+
+/* Header in the reader's key, so the document and its frame are one piece. */
+.top.inst{background:#fbfaf6;border-bottom-color:#e3ddcd}
+.top.inst .brand span{color:#1c1c18}
+.top.inst .tbtn{color:rgba(28,28,24,.64);border-color:#d6cfb9}
+.top.inst .tbtn:hover{color:#1c1c18;border-color:#b1861c}
+.top.inst .lang{border-color:#d6cfb9}
+.top.inst .lang button{color:rgba(28,28,24,.5)}
+.top.inst .lang button[aria-pressed="true"]{background:#1d5730;color:#fff}
+/* Cards need room to breathe on an institutional page; 220px packs seven
+   into a row and none of them read. */
+.doc.inst .kpis{grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:15px}

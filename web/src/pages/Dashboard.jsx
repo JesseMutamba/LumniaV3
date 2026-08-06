@@ -1,6 +1,5 @@
 import Block from '../blocks/index.jsx'
-import Prov from '../blocks/Prov.jsx'
-import { fmt, t } from '../lib/format.js'
+import { t } from '../lib/format.js'
 
 /**
  * Tableau de bord — the same report, as a wall instead of a page.
@@ -26,24 +25,14 @@ export default function Dashboard({ rep, locale }) {
     ? rep.blocks[nIdx + 1]
     : null
 
-  const hero = kpis.find((k) => k.value.unit === 'pct') || kpis[0]
-  const tiles = kpis.filter((k) => k !== hero)
-
+  // Every KPI at the same weight. The old rule promoted the first percentage
+  // to a full-width hero, which meant an extraction rate could outrank the
+  // cost overrun beside it purely for being a percentage — the author's
+  // ordering is better evidence of importance than the unit is.
   return (
     <div className="db">
-      {hero && (
-        <div className="db-hero" data-tone={hero.tone}>
-          <div className="k">{t(hero.label, locale)}</div>
-          <div className="v">{fmt(hero.value, locale)}</div>
-          <div className="s">
-            {t(hero.sub, locale)}
-            <Prov src={hero.value.src} sources={rep.sources} />
-          </div>
-        </div>
-      )}
-
-      {tiles.length > 0 && (
-        <Block b={{ type: 'kpiGrid', items: tiles }} locale={locale} sources={rep.sources} />
+      {kpis.length > 0 && (
+        <Block b={{ type: 'kpiGrid', items: kpis }} locale={locale} sources={rep.sources} />
       )}
 
       {bars.map((b, i) => (

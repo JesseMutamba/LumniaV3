@@ -37,6 +37,8 @@ export function fmt(v, locale) {
       return `${nf(n, locale, 1)} t`
     case 'ha':
       return `${nf(n, locale)} ha`
+    case 'year': // a calendar year is a label, not a quantity: 2028, not 2 028
+      return String(Math.round(n))
     default:
       return nf(n, locale)
   }
