@@ -175,7 +175,6 @@ function Tip({ tip }) {
 
 function BarPair({ b, locale, sources }) {
   const { box, tip, show, hide } = useTip()
-<<<<<<< HEAD
   // A chart shows the shape; a table lets someone check the figure. Anyone
   // asked to sign off on a number wants the second, and the cell address
   // beside it — so the table view is where provenance earns its keep.
@@ -190,14 +189,6 @@ function BarPair({ b, locale, sources }) {
   const W = 600,
     H = 250,
     P = { t: 14, r: 10, b: 28, l: 58 }
-=======
-  const x = b.x === 'months' ? MONTHS[locale] : b.x
-  const [plan, act] = b.series
-  const vals = (s) => (s ? s.values.map((v) => v.n) : [])
-  const W = 960,
-    H = 248,
-    P = { t: 16, r: 10, b: 26, l: 56 }
->>>>>>> origin/main
   const iw = W - P.l - P.r,
     ih = H - P.t - P.b
   const bw = iw / x.length,
