@@ -148,12 +148,12 @@ h3.b-t{font-size:24px;line-height:1.16}
   text-transform:none;color:var(--mut-5)}
 .key i{font-style:normal;display:inline-flex;align-items:center;gap:6px}
 .sw{width:8px;height:8px;display:inline-block}
-.sw.env{background:repeating-linear-gradient(135deg,rgba(235,231,222,.22) 0 2px,transparent 2px 4px);
+.sw-env{background:repeating-linear-gradient(135deg,rgba(235,231,222,.22) 0 2px,transparent 2px 4px);
   border:1px solid rgba(235,231,222,.2)}
-.sw.act{background:var(--gold)}
-.sw.plan{background:rgba(235,231,222,.1);border:1px solid rgba(235,231,222,.4)}
-.sw.actg{background:var(--gold)}
-.sw.pace{background:var(--bright)}
+.sw-act{background:var(--gold)}
+.sw-plan{background:rgba(235,231,222,.1);border:1px solid rgba(235,231,222,.4)}
+.sw-actg{background:var(--gold)}
+.sw-pace{background:var(--bright)}
 .rr{padding-top:20px}
 .rr:first-of-type{padding-top:0}
 .rr-t{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:baseline;
@@ -727,11 +727,11 @@ body:has(.doc.inst){background:#efece3}
 .doc.inst .bar-plan{fill:#d8b45c;stroke:none}
 .doc.inst .bar-act{fill:#2f7d3e}
 .doc.inst .bar-plan.neg,.doc.inst .bar-act.neg{fill:var(--terracotta)}
-.doc.inst .sw.plan{background:#d8b45c;border:0}
-.doc.inst .sw.actg{background:#2f7d3e}
-.doc.inst .sw.env{background:#e3ddcd}
-.doc.inst .sw.act{background:#2f7d3e}
-.doc.inst .sw.pace{background:var(--gold)}
+.doc.inst .sw-plan{background:#d8b45c;border:0}
+.doc.inst .sw-actg{background:#2f7d3e}
+.doc.inst .sw-env{background:#e3ddcd}
+.doc.inst .sw-act{background:#2f7d3e}
+.doc.inst .sw-pace{background:var(--gold)}
 .doc.inst .gl{stroke:var(--line-soft)}
 .doc.inst .ax{fill:var(--mut-5)}
 .doc.inst .base{stroke:#b9b2a0}
@@ -750,3 +750,67 @@ body:has(.doc.inst){background:#efece3}
 /* Cards need room to breathe on an institutional page; 220px packs seven
    into a row and none of them read. */
 .doc.inst .kpis{grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:15px}
+
+/* ------------------------------------------------- institutional layout
+   The one rule that separates a report from a dashboard: panels sit beside
+   each other. Stacked full-width, a chart is enormous, the page is sparse,
+   and you cannot read one series against the one next to it.
+
+   Charts are the only blocks that become cells. Headings, prose, KPI rows,
+   tables, flags and the ledger all keep the full width — a heading floating
+   in a column reads as a caption for the panel beside it, and a table with
+   six columns squeezed into a third of the page helps nobody. */
+/* min() or the 430px floor wins on a narrow screen and the page scrolls
+   sideways: auto-fit will not shrink a column below its stated minimum. */
+.doc.inst .body,.doc.inst .db{display:grid;gap:15px;align-items:start;
+  grid-template-columns:repeat(auto-fit,minmax(min(430px,100%),1fr))}
+.doc.inst .body>.b,.doc.inst .db>.b{margin-bottom:0;min-width:0}
+.doc.inst .body>.b:not(:has(.card)),
+.doc.inst .db>.b:not(:has(.card)),
+.doc.inst .body>.b:has(.kpis),.doc.inst .db>.b:has(.kpis),
+.doc.inst .body>.b:has(table),.doc.inst .db>.b:has(table),
+.doc.inst .body>.b:has(.rail),.doc.inst .db>.b:has(.rail),
+.doc.inst .body>.b:has(.flag),.doc.inst .db>.b:has(.flag),
+.doc.inst .db>.db-flags,.doc.inst .db>.db-narr,.doc.inst .db>.fine{grid-column:1/-1}
+/* A chart that has been flipped to its figures needs the room a table needs. */
+.doc.inst .body>.b:has(.bartable),.doc.inst .db>.b:has(.bartable){grid-column:1/-1}
+.doc.inst .body>.b:has(.card){height:100%}
+.doc.inst .card{height:100%;display:flex;flex-direction:column}
+
+/* Panel chrome: the accent bar, the subtitle, the title in small caps. */
+.doc.inst .card-h{margin-bottom:4px;align-items:flex-start}
+.doc.inst .card-h>span:first-child{display:flex;align-items:center;gap:8px;
+  font-weight:700;font-size:11.5px;letter-spacing:.08em;color:var(--ink)}
+.doc.inst .card-h>span:first-child::before{content:"";width:3px;height:13px;
+  border-radius:2px;background:var(--green);flex:none}
+.doc.inst .card-s{font-size:11px;color:var(--mut-6);margin:0 0 12px 11px;
+  font-family:var(--sans);letter-spacing:0;text-transform:none}
+
+/* Chart ↔ figures toggle. A chart shows the shape; the table is where a
+   reader checks the number and its cell before signing anything. */
+.viewtog{background:none;border:1px solid var(--line-strong);border-radius:2px;
+  color:var(--mut-6);font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;padding:4px 9px;cursor:pointer;transition:.12s}
+.viewtog:hover{border-color:var(--gold);color:var(--gold)}
+.viewtog[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+.doc.inst .viewtog:hover,.doc.inst .viewtog[aria-pressed="true"]{
+  border-color:var(--green);color:var(--green)}
+svg.clickable{cursor:pointer}
+.bartable{margin-top:4px}
+.bartable td,.bartable th{white-space:nowrap}
+.bartable tfoot td{font-weight:600;border-top:1.5px solid var(--line);
+  background:var(--well)}
+.bartable .dash{color:var(--mut-34)}
+.doc.inst .bartable tfoot td{background:#faf8f2}
+
+/* Chart type, sized for a panel rather than a full page. These are SVG user
+   units scaled by the viewBox, not screen pixels — see the note in BarPair. */
+.doc.inst .ax{font-size:11px}
+.doc.inst .card-h{font-size:9.5px;letter-spacing:.06em;gap:10px}
+.doc.inst .card-h .key{font-size:9.5px;gap:10px;letter-spacing:.04em;
+  display:flex;align-items:center;flex-wrap:wrap}
+.doc.inst .card-h .key i{display:inline-flex;align-items:center;gap:5px;font-style:normal}
+.doc.inst .viewtog{padding:3px 7px;font-size:9px}
+/* A legend swatch is a fixed 8px mark; as a flex item it was stretching to
+   fill the line box and reading as a filled block. */
+.card-h .key .sw{flex:none;width:8px;height:8px;border-radius:1px}

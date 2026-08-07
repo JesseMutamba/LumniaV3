@@ -338,9 +338,14 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
       {lens === 'dash' ? (
         <Dashboard rep={rep} locale={locale} />
       ) : (
-        (tabs.find((tb) => tb.key === lens) || tabs[0]).blocks.map((b, i) => (
-          <Block key={i} b={b} locale={locale} sources={rep.sources} />
-        ))
+        // Wrapped so the institutional theme can lay panels out side by side.
+        // A chart given the full width of the page is a chart nobody can read
+        // against the one beside it.
+        <div className="body">
+          {(tabs.find((tb) => tb.key === lens) || tabs[0]).blocks.map((b, i) => (
+            <Block key={i} b={b} locale={locale} sources={rep.sources} />
+          ))}
+        </div>
       )}
 
       <div className="foot">

@@ -92,15 +92,15 @@ const Rail = ({ b, locale, sources }) => (
         <span>{locale === 'fr' ? 'Exécution' : 'Execution'}</span>
         <div className="key">
           <i>
-            <span className="sw env" />
+            <span className="sw sw-env" />
             {locale === 'fr' ? 'Enveloppe' : 'Envelope'}
           </i>
           <i>
-            <span className="sw act" />
+            <span className="sw sw-act" />
             {locale === 'fr' ? 'Réel' : 'Actual'}
           </i>
           <i>
-            <span className="sw pace" />
+            <span className="sw sw-pace" />
             {locale === 'fr' ? 'Rythme prévu' : 'Planned pace'}
           </i>
         </div>
@@ -175,12 +175,20 @@ function Tip({ tip }) {
 
 function BarPair({ b, locale, sources }) {
   const { box, tip, show, hide } = useTip()
+  // A chart shows the shape; a table lets someone check the figure. Anyone
+  // asked to sign off on a number wants the second, and the cell address
+  // beside it — so the table view is where provenance earns its keep.
+  const [asTable, setAsTable] = useState(false)
   const x = b.x === 'months' ? MONTHS[locale] : b.x
   const [plan, act] = b.series
   const vals = (s) => (s ? s.values.map((v) => v.n) : [])
-  const W = 960,
-    H = 248,
-    P = { t: 16, r: 10, b: 26, l: 56 }
+  // The viewBox is the chart's own coordinate space, and SVG text scales
+  // with it. At 960 units wide inside a half-width panel, 9.5px axis labels
+  // land at about 4.6 real pixels — present, and unreadable. Keeping the box
+  // near the rendered width keeps the type near its stated size.
+  const W = 600,
+    H = 250,
+    P = { t: 14, r: 10, b: 28, l: 58 }
   const iw = W - P.l - P.r,
     ih = H - P.t - P.b
   const bw = iw / x.length,
@@ -207,19 +215,47 @@ function BarPair({ b, locale, sources }) {
             <Prov src={plan?.values?.[0]?.src} sources={sources} />
           </span>
           <span className="key">
-            <i>
-              <span className="sw plan" />
-              {t(plan?.label, locale) || 'Budget'}
-            </i>
-            {act && (
-              <i>
-                <span className="sw actg" />
-                {t(act.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')}
-              </i>
+            {!asTable && (
+              <>
+                <i>
+                  <span className="sw sw-plan" />
+                  {t(plan?.label, locale) || 'Budget'}
+                </i>
+                {act && (
+                  <i>
+                    <span className="sw sw-actg" />
+                    {t(act.label, locale) || (locale === 'fr' ? 'Réel' : 'Actual')}
+                  </i>
+                )}
+              </>
             )}
+            <button
+              className="viewtog"
+              aria-pressed={asTable}
+              onClick={() => setAsTable(!asTable)}
+              title={
+                locale === 'fr'
+                  ? 'Basculer entre le graphique et les chiffres'
+                  : 'Switch between the chart and the figures'
+              }
+            >
+              {asTable
+                ? locale === 'fr' ? 'graphique' : 'chart'
+                : locale === 'fr' ? 'chiffres' : 'figures'}
+            </button>
           </span>
         </div>
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t(b.title, locale)}>
+        {b.sub && <div className="card-s">{t(b.sub, locale)}</div>}
+        {asTable ? (
+          <BarTable b={b} x={x} plan={plan} act={act} locale={locale} sources={sources} />
+        ) : (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          aria-label={t(b.title, locale)}
+          className="clickable"
+          onClick={() => setAsTable(true)}
+        >
           {[1, 2, 3, 4].map((i) => {
             const v = lo + (span * i) / 4
             return (
@@ -286,7 +322,90 @@ function BarPair({ b, locale, sources }) {
             </g>
           )}
         </svg>
+        )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The figures behind a chart, each with the cell it came from.
+ *
+ * Where two series are plotted the variance column is the point: budget
+ * against actual is the comparison every reader is actually making, and
+ * doing that subtraction in your head off a bar chart is how people get it
+ * wrong.
+ */
+function BarTable({ b, x, plan, act, locale, sources }) {
+  const L = locale === 'fr'
+  const cell = (v) =>
+    v == null ? (
+      <span className="dash">—</span>
+    ) : (
+      <>
+        {fmt(v, locale)}
+        <Prov src={v.src} sources={sources} />
+      </>
+    )
+  // Quantities add up. Rates do not: three months at $593/t is not
+  // $1,779/t, and a column of percentages summed is nonsense. Where the
+  // series carries a rate there is no honest total to show, and the
+  // numerator and denominator that would give one are not in this block —
+  // so the row is left off rather than filled with a plausible number.
+  const unit = plan?.values?.[0]?.unit ?? 'none'
+  const ADDITIVE = new Set(['USD', 'CDF', 't', 'ha', 'count'])
+  const addable = ADDITIVE.has(unit)
+  const totalOf = (s) =>
+    s ? s.values.reduce((a, v) => a + (v?.n ?? 0), 0) : null
+  const tot = (n) =>
+    n == null ? '' : fmt({ n, unit, src: { file: 0, sheet: '', cells: '' } }, locale)
+
+  return (
+    <div className="scroll bartable">
+      <table>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left' }}>{b.x === 'months' ? (L ? 'Mois' : 'Month') : (L ? 'Période' : 'Period')}</th>
+            {plan && <th>{t(plan.label, locale) || 'Budget'}</th>}
+            {act && <th>{t(act.label, locale) || (L ? 'Réel' : 'Actual')}</th>}
+            {plan && act && <th>{L ? 'Écart' : 'Variance'}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {x.map((m, i) => {
+            const p = plan?.values[i]
+            const a = act?.values[i]
+            const d = p && a ? a.n - p.n : null
+            return (
+              <tr key={m + i}>
+                <td style={{ textAlign: 'left' }}>{m}</td>
+                {plan && <td>{cell(p)}</td>}
+                {act && <td>{cell(a)}</td>}
+                {plan && act && (
+                  <td className={d < 0 ? 'neg' : d > 0 ? 'pos' : ''}>
+                    {d == null ? <span className="dash">—</span> : (d > 0 ? '+' : '') + tot(d)}
+                  </td>
+                )}
+              </tr>
+            )
+          })}
+        </tbody>
+        {addable && (
+        <tfoot>
+          <tr>
+            <td style={{ textAlign: 'left' }}>{L ? 'Total' : 'Total'}</td>
+            {plan && <td>{tot(totalOf(plan))}</td>}
+            {act && <td>{tot(totalOf(act))}</td>}
+            {plan && act && (
+              <td className={totalOf(act) - totalOf(plan) < 0 ? 'neg' : 'pos'}>
+                {totalOf(act) - totalOf(plan) > 0 ? '+' : ''}
+                {tot(totalOf(act) - totalOf(plan))}
+              </td>
+            )}
+          </tr>
+        </tfoot>
+        )}
+      </table>
     </div>
   )
 }
