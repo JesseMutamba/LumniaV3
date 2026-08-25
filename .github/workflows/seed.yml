@@ -39,7 +39,9 @@ jobs:
             echo "Render service (Settings > Deploy Hook) into that secret."
             exit 0
           fi
-          curl -sS -X POST "$HOOK"
+          # -f: an HTTP error from the hook must fail this step loudly, not
+          # print an error body and count as a triggered deploy.
+          curl -fsS -X POST "$HOOK"
           echo
           echo "deploy triggered"
       - name: Create client and publish template report
