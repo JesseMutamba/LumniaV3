@@ -73,9 +73,9 @@ export default function Simulation({ b, locale, sources, mode }) {
             : 'Projection missing full provenance — nothing to simulate.'}
         </div>
       ) : active === 'monte' ? (
-        <MonteCarloTab rows={rows} />
+        <MonteCarloTab rows={rows} locale={L ? 'fr' : 'en'} />
       ) : (
-        <ScenarioTab rows={rows} />
+        <ScenarioTab rows={rows} locale={L ? 'fr' : 'en'} />
       )}
     </div>
   )

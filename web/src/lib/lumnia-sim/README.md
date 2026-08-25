@@ -10,7 +10,7 @@ passed in. The UI layer sits on `lumnia-ui`.
 ```
 src/   engine   model · random · stats · monte     (no dependencies at all)
 ui/    tabs     ScenarioTab · MonteCarloTab        (react + recharts + lumnia-ui)
-test/  oracles  56 deterministic assertions
+test/  oracles  61 deterministic assertions
 ```
 
 ---
@@ -44,9 +44,14 @@ import { ScenarioTab, MonteCarloTab } from "lumnia-sim/ui";
 
 const rows = await loadProjection(reportId);   // your data, your fetch
 
-<ScenarioTab rows={rows} />
-<MonteCarloTab rows={rows} onRun={(r) => saveSeed(reportId, r.seed)} />
+<ScenarioTab rows={rows} locale="fr" />
+<MonteCarloTab rows={rows} locale="fr" onRun={(r) => saveSeed(reportId, r.seed)} />
 ```
+
+`locale` is `"en"` (the default) or `"fr"`; an unknown value falls back to
+English. Every display string lives in `ui/i18n.js` — the engine is
+language-free, and scenario and driver names are looked up there by key, so
+adding a locale is one entry in that file.
 
 Headless, for a server-rendered report or a pytest-style oracle:
 
@@ -203,7 +208,7 @@ discarded its second deviate on every call — now cached, halving the uniform d
 
 ## Test
 
-56 assertions, all deterministic. The first five re-implement the **original**
+61 assertions, all deterministic. The first five re-implement the **original**
 formulas inline and assert the port is numerically identical, so nothing above
 was a silent rewrite.
 

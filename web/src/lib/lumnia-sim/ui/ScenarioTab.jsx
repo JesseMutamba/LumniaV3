@@ -16,6 +16,7 @@ import { color as C, Panel, SectionTitle, RangeSlider, ChartTooltip, fmt } from 
 import {
   DRIVERS, SCENARIO_DEFS, SCENARIO_KEYS, NEUTRAL, computeAll, factorsOf,
 } from "../src/model.js";
+import { strings } from "./i18n.js";
 
 const yAxisMoney = (v) =>
   v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M`
@@ -25,7 +26,7 @@ const yAxisMoney = (v) =>
 const marginTone = (pct) => (pct >= 50 ? C.forest : pct >= 20 ? C.gold : C.red);
 
 /** Scenario headline card. Deliberately not StatCard: it carries four values. */
-function ScenarioCard({ label, accent, totals }) {
+function ScenarioCard({ label, accent, totals, T }) {
   return (
     <div
       style={{
@@ -44,16 +45,16 @@ function ScenarioCard({ label, accent, totals }) {
       <p style={{ color: accent, fontSize: 20, fontWeight: 700, margin: "0 0 3px", fontFamily: "monospace" }}>
         {fmt(totals.revenue)}
       </p>
-      <p style={{ color: C.muted, fontSize: 10, margin: 0 }}>Total revenue, full window</p>
+      <p style={{ color: C.muted, fontSize: 10, margin: 0 }}>{T.totalRevenueWindow}</p>
       <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
         <div>
-          <p style={{ color: C.muted, fontSize: 9, margin: 0 }}>NET MARGIN</p>
+          <p style={{ color: C.muted, fontSize: 9, margin: 0 }}>{T.netMargin}</p>
           <p style={{ color: accent, fontSize: 13, fontWeight: 700, margin: 0, fontFamily: "monospace" }}>
             {fmt(totals.margin)}
           </p>
         </div>
         <div>
-          <p style={{ color: C.muted, fontSize: 9, margin: 0 }}>FINAL YEAR MARGIN%</p>
+          <p style={{ color: C.muted, fontSize: 9, margin: 0 }}>{T.finalYearMargin}</p>
           <p style={{ color: accent, fontSize: 13, fontWeight: 700, margin: 0, fontFamily: "monospace" }}>
             {totals.finalMarginPct.toFixed(0)}%
           </p>
@@ -86,7 +87,8 @@ function PresetButton({ label, accent, onClick, muted }) {
   );
 }
 
-export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }) {
+export default function ScenarioTab({ rows = [], initialCustom, onCustomChange, locale = "en" }) {
+  const T = strings(locale);
   const [custom, setCustom] = useState(initialCustom ?? NEUTRAL);
 
   const setAndReport = (updater) =>
@@ -100,7 +102,9 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
   const scen = useMemo(() => computeAll(rows, custom), [rows, custom]);
 
   const accentOf = (k) => C[scen[k].def.accent] ?? C.amber;
-  const labelOf = (k) => scen[k].def.label;
+  // Display names live in the string table; the engine's defs stay
+  // language-free and only supply the fallback.
+  const labelOf = (k) => T.scenario[k] ?? scen[k].def.label;
 
   const revenueChartData = useMemo(
     () => years.map((y, i) => ({
@@ -110,7 +114,7 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
       [labelOf("bull")]: scen.bull.rows[i].revenue,
       [labelOf("custom")]: scen.custom.rows[i].revenue,
     })),
-    [years, scen]
+    [years, scen, T]
   );
 
   const marginChartData = useMemo(
@@ -121,7 +125,7 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
       [labelOf("bull")]: scen.bull.rows[i].marginPct,
       [labelOf("custom")]: scen.custom.rows[i].marginPct,
     })),
-    [years, scen]
+    [years, scen, T]
   );
 
   /* The original chart was subtitled "revenue vs opex vs margin" and drew only
@@ -129,11 +133,11 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
   const totalsChartData = useMemo(
     () => SCENARIO_KEYS.map((k) => ({
       name: labelOf(k),
-      Revenue: scen[k].totals.revenue,
-      OPEX: scen[k].totals.opex,
-      Margin: scen[k].totals.margin,
+      [T.revenue]: scen[k].totals.revenue,
+      [T.opex]: scen[k].totals.opex,
+      [T.margin]: scen[k].totals.margin,
     })),
-    [scen]
+    [scen, T]
   );
 
   const lineFor = (k, extra = {}) => (
@@ -151,7 +155,7 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
   if (rows.length === 0) {
     return (
       <Panel>
-        <SectionTitle sub="Pass a rows prop to render this tab">No projection data</SectionTitle>
+        <SectionTitle sub={T.noDataSub}>{T.noData}</SectionTitle>
       </Panel>
     );
   }
@@ -161,21 +165,21 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
       {/* Scenario headline row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
         {SCENARIO_KEYS.map((k) => (
-          <ScenarioCard key={k} label={labelOf(k)} accent={accentOf(k)} totals={scen[k].totals} />
+          <ScenarioCard key={k} label={labelOf(k)} accent={accentOf(k)} totals={scen[k].totals} T={T} />
         ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16, marginBottom: 16 }}>
         {/* Driver controls */}
         <Panel>
-          <SectionTitle accent={C.amber} sub="Drag to build your own scenario">
-            Custom scenario levers
+          <SectionTitle accent={C.amber} sub={T.customLeversSub}>
+            {T.customLevers}
           </SectionTitle>
 
           {DRIVERS.map((d) => (
             <RangeSlider
               key={d.key}
-              label={d.label}
+              label={T.driver[d.key] ?? d.label}
               min={d.min}
               max={d.max}
               step={d.step}
@@ -187,30 +191,29 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
           ))}
 
           <p style={{ color: C.muted, fontSize: 10, lineHeight: 1.45, margin: "2px 0 0", fontStyle: "italic" }}>
-            Yield and extraction enter the model as a single product. Moving one
-            by 10% is identical to moving the other by 10%. Two sliders, one lever.
+            {T.collinearity}
           </p>
 
           <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
             <p style={{ color: C.muted, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 10px" }}>
-              Preset assumptions
+              {T.presets}
             </p>
             {["bear", "base", "bull"].map((k) => (
               <PresetButton
                 key={k}
-                label={`Load ${SCENARIO_DEFS[k].label}`}
+                label={T.load(T.scenario[k] ?? SCENARIO_DEFS[k].label)}
                 accent={C[SCENARIO_DEFS[k].accent]}
                 onClick={() => setAndReport(factorsOf(SCENARIO_DEFS[k]))}
               />
             ))}
-            <PresetButton label="Reset" muted onClick={() => setAndReport({ ...NEUTRAL })} />
+            <PresetButton label={T.reset} muted onClick={() => setAndReport({ ...NEUTRAL })} />
           </div>
         </Panel>
 
         {/* Revenue by scenario */}
         <Panel>
-          <SectionTitle accent={C.forest} sub="Annual revenue projection across all four scenarios">
-            Revenue by scenario
+          <SectionTitle accent={C.forest} sub={T.revenueByScenarioSub}>
+            {T.revenueByScenario}
           </SectionTitle>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={revenueChartData}>
@@ -231,8 +234,8 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         {/* Margin % */}
         <Panel>
-          <SectionTitle accent={C.leaf} sub="Operating margin percentage by scenario, year on year">
-            Margin % by scenario
+          <SectionTitle accent={C.leaf} sub={T.marginByScenarioSub}>
+            {T.marginByScenario}
           </SectionTitle>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={marginChartData}>
@@ -252,8 +255,8 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
 
         {/* Window totals */}
         <Panel>
-          <SectionTitle accent={C.gold} sub="Cumulative revenue, opex and margin across the window">
-            Window totals by scenario
+          <SectionTitle accent={C.gold} sub={T.windowTotalsSub}>
+            {T.windowTotals}
           </SectionTitle>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={totalsChartData} barSize={16}>
@@ -264,9 +267,9 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
               <Legend wrapperStyle={{ color: C.muted, fontSize: 11 }} />
               {/* One fixed colour per series. The scenario is already on the X
                   axis, so tinting bars per scenario only made the legend lie. */}
-              <Bar dataKey="Revenue" fill={C.leaf} radius={[3, 3, 0, 0]} fillOpacity={0.9} />
-              <Bar dataKey="OPEX" fill={C.earth} radius={[3, 3, 0, 0]} fillOpacity={0.6} />
-              <Bar dataKey="Margin" fill={C.gold} radius={[3, 3, 0, 0]} fillOpacity={0.85} />
+              <Bar dataKey={T.revenue} fill={C.leaf} radius={[3, 3, 0, 0]} fillOpacity={0.9} />
+              <Bar dataKey={T.opex} fill={C.earth} radius={[3, 3, 0, 0]} fillOpacity={0.6} />
+              <Bar dataKey={T.margin} fill={C.gold} radius={[3, 3, 0, 0]} fillOpacity={0.85} />
             </BarChart>
           </ResponsiveContainer>
         </Panel>
@@ -274,15 +277,15 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
 
       {/* Comparison table */}
       <Panel>
-        <SectionTitle accent={C.forest} sub="Revenue, opex and margin year by year, every scenario">
-          Full scenario comparison
+        <SectionTitle accent={C.forest} sub={T.comparisonSub}>
+          {T.comparison}
         </SectionTitle>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${C.border}` }}>
                 <th style={{ color: C.muted, textAlign: "left", padding: "8px 10px", fontWeight: 600, fontSize: 10, letterSpacing: "0.06em" }}>
-                  YEAR
+                  {T.yearCol}
                 </th>
                 {SCENARIO_KEYS.map((k) => (
                   <th
@@ -301,13 +304,13 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                 <th />
                 {SCENARIO_KEYS.map((k) =>
-                  ["Rev", "OPEX", "Margin%"].map((h) => (
+                  [T.revCol, T.opex, T.marginPctCol].map((h, hi) => (
                     <th
                       key={k + h}
                       style={{
                         color: C.muted, textAlign: "right", padding: "5px 8px",
                         fontWeight: 500, fontSize: 9,
-                        borderLeft: h === "Rev" ? `1px solid ${C.border}` : "none",
+                        borderLeft: hi === 0 ? `1px solid ${C.border}` : "none",
                       }}
                     >
                       {h}
@@ -340,7 +343,7 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange }
                 </tr>
               ))}
               <tr style={{ borderTop: `2px solid ${C.border}`, background: `${C.gold}0A` }}>
-                <td style={{ padding: "9px 10px", color: C.gold, fontWeight: 700, fontSize: 11 }}>TOTAL</td>
+                <td style={{ padding: "9px 10px", color: C.gold, fontWeight: 700, fontSize: 11 }}>{T.totalRow}</td>
                 {SCENARIO_KEYS.flatMap((k) => {
                   const t = scen[k].totals;
                   const accent = accentOf(k);

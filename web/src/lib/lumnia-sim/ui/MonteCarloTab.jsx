@@ -18,47 +18,50 @@ import {
 import { color as C, Panel, SectionTitle, RangeSlider, fmt, fmtN } from "lumnia-ui";
 import { DEFAULT_PARAMS, runMonteCarlo, metricValues, baselineTotals } from "../src/monte.js";
 import { summarize, buildHistogram, probabilityAbove } from "../src/stats.js";
+import { strings } from "./i18n.js";
 
+/* Labels live in i18n.js, looked up by key. */
 const METRICS = [
-  { key: "totalRevenue", label: "Total revenue", accent: "forest", kind: "money" },
-  { key: "totalMargin", label: "Total margin", accent: "leaf", kind: "money" },
-  { key: "finalYearMarginPct", label: "Final year margin %", accent: "gold", kind: "pct" },
+  { key: "totalRevenue", accent: "forest", kind: "money" },
+  { key: "totalMargin", accent: "leaf", kind: "money" },
+  { key: "finalYearMarginPct", accent: "gold", kind: "pct" },
 ];
 
-/** Slider groups, so adding a driver is one entry rather than four edits. */
+/** Slider groups, so adding a driver is one entry rather than four edits.
+    Group headings and the μ/σ labels come from i18n.js by key. */
 const PARAM_GROUPS = [
   {
-    heading: "CPO market price ($/T)",
+    key: "price",
     accent: "forest",
     fields: [
-      { key: "cpoPriceMu", label: "Mean (μ)", min: 600, max: 1400, step: 25, format: (v) => `$${v}` },
-      { key: "cpoPriceSd", label: "Std dev (σ)", min: 30, max: 300, step: 10, format: (v) => `±$${v}` },
+      { key: "cpoPriceMu", stat: "mean", min: 600, max: 1400, step: 25, format: (v) => `$${v}` },
+      { key: "cpoPriceSd", stat: "sd", min: 30, max: 300, step: 10, format: (v) => `±$${v}` },
     ],
   },
   {
-    heading: "Yield factor",
+    key: "yield",
     accent: "leaf",
     fields: [
-      { key: "yieldMu", label: "Mean (μ)", min: 0.7, max: 1.3, step: 0.05, format: (v) => `${(v * 100).toFixed(0)}%` },
-      { key: "yieldSd", label: "Std dev (σ)", min: 0.01, max: 0.2, step: 0.01, format: (v) => `±${(v * 100).toFixed(0)}%` },
+      { key: "yieldMu", stat: "mean", min: 0.7, max: 1.3, step: 0.05, format: (v) => `${(v * 100).toFixed(0)}%` },
+      { key: "yieldSd", stat: "sd", min: 0.01, max: 0.2, step: 0.01, format: (v) => `±${(v * 100).toFixed(0)}%` },
     ],
   },
   {
     /* The original ran extraction as a live random variable with no slider.
        It moved every result and nobody could see or set it. */
-    heading: "Extraction factor",
+    key: "extraction",
     accent: "leaf",
     fields: [
-      { key: "extractMu", label: "Mean (μ)", min: 0.8, max: 1.2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
-      { key: "extractSd", label: "Std dev (σ)", min: 0, max: 0.1, step: 0.01, format: (v) => `±${(v * 100).toFixed(0)}%` },
+      { key: "extractMu", stat: "mean", min: 0.8, max: 1.2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
+      { key: "extractSd", stat: "sd", min: 0, max: 0.1, step: 0.01, format: (v) => `±${(v * 100).toFixed(0)}%` },
     ],
   },
   {
-    heading: "OPEX factor",
+    key: "opex",
     accent: "earth",
     fields: [
-      { key: "opexMu", label: "Mean (μ)", min: 0.8, max: 1.3, step: 0.05, format: (v) => `${(v * 100).toFixed(0)}%` },
-      { key: "opexSd", label: "Std dev (σ)", min: 0.02, max: 0.2, step: 0.01, format: (v) => `±${(v * 100).toFixed(0)}%` },
+      { key: "opexMu", stat: "mean", min: 0.8, max: 1.3, step: 0.05, format: (v) => `${(v * 100).toFixed(0)}%` },
+      { key: "opexSd", stat: "sd", min: 0.02, max: 0.2, step: 0.01, format: (v) => `±${(v * 100).toFixed(0)}%` },
     ],
   },
 ];
@@ -89,7 +92,9 @@ function Empty({ height, children }) {
   );
 }
 
-export default function MonteCarloTab({ rows = [], initialParams, seed, onRun }) {
+export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, locale = "en" }) {
+  const T = strings(locale);
+  const nf = (n) => n.toLocaleString(locale === "fr" ? "fr-FR" : "en-US");
   const [params, setParams] = useState({ ...DEFAULT_PARAMS, ...initialParams });
   const [run, setRun] = useState(null); // { trials, seed, params }
   const [running, setRunning] = useState(false);
@@ -146,15 +151,15 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
     if (!baseline) return [];
     const r = baseline.revenue, m = baseline.margin, fp = baseline.finalMarginPct;
     return [
-      { label: "Total revenue beats plan", target: r, key: "totalRevenue", kind: "money" },
-      { label: "Total revenue > plan +15%", target: r * 1.15, key: "totalRevenue", kind: "money" },
-      { label: "Total revenue > plan +30%", target: r * 1.3, key: "totalRevenue", kind: "money" },
-      { label: "Total margin beats plan", target: m, key: "totalMargin", kind: "money" },
-      { label: "Total margin > plan +25%", target: m * 1.25, key: "totalMargin", kind: "money" },
-      { label: "Final year margin holds", target: fp, key: "finalYearMarginPct", kind: "pct" },
-      { label: "Final year margin > plan +10pp", target: fp + 10, key: "finalYearMarginPct", kind: "pct" },
+      { label: T.target.revBeats, target: r, key: "totalRevenue", kind: "money" },
+      { label: T.target.rev15, target: r * 1.15, key: "totalRevenue", kind: "money" },
+      { label: T.target.rev30, target: r * 1.3, key: "totalRevenue", kind: "money" },
+      { label: T.target.marginBeats, target: m, key: "totalMargin", kind: "money" },
+      { label: T.target.margin25, target: m * 1.25, key: "totalMargin", kind: "money" },
+      { label: T.target.finalHolds, target: fp, key: "finalYearMarginPct", kind: "pct" },
+      { label: T.target.final10pp, target: fp + 10, key: "finalYearMarginPct", kind: "pct" },
     ];
-  }, [baseline]);
+  }, [baseline, T]);
 
   const scatter = useMemo(() => {
     if (!run) return [];
@@ -168,7 +173,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
   if (rows.length === 0) {
     return (
       <Panel>
-        <SectionTitle sub="Pass a rows prop to render this tab">No projection data</SectionTitle>
+        <SectionTitle sub={T.noDataSub}>{T.noData}</SectionTitle>
       </Panel>
     );
   }
@@ -180,17 +185,17 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, marginBottom: 16 }}>
         {/* Parameters */}
         <Panel>
-          <SectionTitle accent={C.forest} sub="Distribution parameters for each variable">
-            Simulation parameters
+          <SectionTitle accent={C.forest} sub={T.simParamsSub}>
+            {T.simParams}
           </SectionTitle>
 
           {PARAM_GROUPS.map((g, gi) => (
-            <div key={g.heading}>
-              <GroupHeading first={gi === 0}>{g.heading}</GroupHeading>
+            <div key={g.key}>
+              <GroupHeading first={gi === 0}>{T.group[g.key]}</GroupHeading>
               {g.fields.map((f) => (
                 <RangeSlider
                   key={f.key}
-                  label={f.label}
+                  label={f.stat === "mean" ? T.mean : T.sd}
                   min={f.min}
                   max={f.max}
                   step={f.step}
@@ -203,15 +208,15 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
             </div>
           ))}
 
-          <GroupHeading>Trials</GroupHeading>
+          <GroupHeading>{T.trials}</GroupHeading>
           <RangeSlider
-            label="Number of draws (N)"
+            label={T.draws}
             min={500}
             max={5000}
             step={500}
             value={params.N}
             onChange={(v) => setParams((p) => ({ ...p, N: v }))}
-            format={(v) => v.toLocaleString()}
+            format={nf}
             color={C.gold}
           />
 
@@ -228,12 +233,12 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
               letterSpacing: "0.06em", transition: "background 0.2s",
             }}
           >
-            {running ? "Running…" : `Run ${params.N.toLocaleString()} trials`}
+            {running ? T.running : T.run(nf(params.N))}
           </button>
 
           {run && (
             <p style={{ color: C.muted, fontSize: 9, fontFamily: "monospace", margin: "8px 0 0", textAlign: "center" }}>
-              seed {run.seed} · reproducible
+              {T.seedNote(run.seed)}
             </p>
           )}
         </Panel>
@@ -254,23 +259,23 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
                   fontWeight: 600, cursor: "pointer",
                 }}
               >
-                {m.label}
+                {T.metric[m.key]}
               </button>
             ))}
           </div>
 
           {stats && (
             <div style={{ display: "flex", gap: 10 }}>
-              <StatTile label="P10 · downside" value={formatMetric(stats.p10)} sub="10% of draws below" accent={C.red} />
-              <StatTile label="P50 · median" value={formatMetric(stats.p50)} sub="Half above, half below" accent={C.gold} />
-              <StatTile label="P90 · upside" value={formatMetric(stats.p90)} sub="90% of draws below" accent={C.forest} />
-              <StatTile label="Mean ± σ" value={formatMetric(stats.mean)} sub={`σ = ${formatMetric(stats.sd)}`} accent={accent} />
+              <StatTile label={T.p10} value={formatMetric(stats.p10)} sub={T.p10Sub} accent={C.red} />
+              <StatTile label={T.p50} value={formatMetric(stats.p50)} sub={T.p50Sub} accent={C.gold} />
+              <StatTile label={T.p90} value={formatMetric(stats.p90)} sub={T.p90Sub} accent={C.forest} />
+              <StatTile label={T.meanSd} value={formatMetric(stats.mean)} sub={`σ = ${formatMetric(stats.sd)}`} accent={accent} />
             </div>
           )}
 
           <Panel style={{ flex: 1 }}>
-            <SectionTitle accent={accent} sub={`${mc.label} across ${params.N.toLocaleString()} trials`}>
-              Outcome distribution
+            <SectionTitle accent={accent} sub={T.outcomeSub(T.metric[mc.key], nf(params.N))}>
+              {T.outcome}
             </SectionTitle>
             {analysis && stats ? (
               <ResponsiveContainer width="100%" height={280}>
@@ -284,13 +289,13 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
                   />
                   <YAxis tickFormatter={(v) => `${v.toFixed(1)}%`} tick={{ fill: C.muted, fontSize: 9 }} axisLine={false} tickLine={false} width={36} />
                   <Tooltip
-                    formatter={(v, n, p) => [`${p.payload.pct.toFixed(2)}%`, "Frequency"]}
+                    formatter={(v, n, p) => [`${p.payload.pct.toFixed(2)}%`, T.frequency]}
                     labelFormatter={(v) => (mc.kind === "pct" ? `${Number(v).toFixed(1)}%` : fmt(v))}
                   />
                   <ReferenceLine x={analysis.marks.p10} stroke={C.red} strokeDasharray="4 2" label={{ value: "P10", fill: C.red, fontSize: 8, position: "top" }} />
                   <ReferenceLine x={analysis.marks.p50} stroke={C.gold} strokeWidth={2} label={{ value: "P50", fill: C.gold, fontSize: 8, position: "top" }} />
                   <ReferenceLine x={analysis.marks.p90} stroke={C.forest} strokeDasharray="4 2" label={{ value: "P90", fill: C.forest, fontSize: 8, position: "top" }} />
-                  <Bar dataKey="pct" name="Frequency %">
+                  <Bar dataKey="pct" name={T.frequencyPct}>
                     {analysis.hist.map((h, i) => (
                       <Cell
                         key={i}
@@ -302,7 +307,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <Empty height={280}>Press Run to generate trials</Empty>
+              <Empty height={280}>{T.pressRun}</Empty>
             )}
           </Panel>
         </div>
@@ -311,8 +316,8 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {/* Price sensitivity */}
         <Panel>
-          <SectionTitle accent={C.gold} sub="Sampled trials, showing sensitivity to CPO price">
-            CPO price vs outcome
+          <SectionTitle accent={C.gold} sub={T.priceVsOutcomeSub}>
+            {T.priceVsOutcome}
           </SectionTitle>
           {scatter.length > 0 ? (
             <ResponsiveContainer width="100%" height={190}>
@@ -321,25 +326,25 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
                 <XAxis
                   dataKey="cpoPrice" tickFormatter={(v) => `$${v}`} minTickGap={28}
                   tick={{ fill: C.muted, fontSize: 10 }} axisLine={false} tickLine={false}
-                  label={{ value: "CPO price ($/T)", fill: C.muted, fontSize: 9, position: "insideBottom", offset: -2 }}
+                  label={{ value: T.priceAxis, fill: C.muted, fontSize: 9, position: "insideBottom", offset: -2 }}
                 />
                 <YAxis
                   tickFormatter={(v) => (mc.kind === "pct" ? `${v.toFixed(0)}%` : fmtN(v))}
                   tick={{ fill: C.muted, fontSize: 9 }} axisLine={false} tickLine={false} width={50}
                 />
-                <Tooltip formatter={(v) => [formatMetric(v), mc.label]} labelFormatter={(v) => `CPO price $${v}/T`} />
-                <Line dataKey="outcome" name={mc.label} stroke="none" dot={{ r: 2, fill: accent, fillOpacity: 0.5, strokeWidth: 0 }} />
+                <Tooltip formatter={(v) => [formatMetric(v), T.metric[mc.key]]} labelFormatter={(v) => T.priceAt(v)} />
+                <Line dataKey="outcome" name={T.metric[mc.key]} stroke="none" dot={{ r: 2, fill: accent, fillOpacity: 0.5, strokeWidth: 0 }} />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
-            <Empty height={190}>Run a simulation first</Empty>
+            <Empty height={190}>{T.runFirst}</Empty>
           )}
         </Panel>
 
         {/* Probability of beating plan */}
         <Panel>
-          <SectionTitle accent={C.forest} sub="Chance of clearing each threshold, measured against plan">
-            Probability analysis
+          <SectionTitle accent={C.forest} sub={T.probabilitySub}>
+            {T.probability}
           </SectionTitle>
           {run && baseline ? (
             <div>
@@ -366,16 +371,11 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun })
                 );
               })}
               <p style={{ color: C.muted, fontSize: 10, marginTop: 12, fontStyle: "italic", lineHeight: 1.5 }}>
-                {run.params.N.toLocaleString()} draws, seed {run.seed}. CPO price
-                N(${run.params.cpoPriceMu}, {run.params.cpoPriceSd}), yield
-                N({run.params.yieldMu.toFixed(2)}, {run.params.yieldSd.toFixed(2)}), extraction
-                N({run.params.extractMu.toFixed(2)}, {run.params.extractSd.toFixed(2)}), opex
-                N({run.params.opexMu.toFixed(2)}, {run.params.opexSd.toFixed(2)}). Thresholds are
-                relative to the plan as loaded.
+                {T.footNote(run.params, run.seed, nf)}
               </p>
             </div>
           ) : (
-            <Empty height={190}>Run a simulation to see probabilities</Empty>
+            <Empty height={190}>{T.runToSee}</Empty>
           )}
         </Panel>
       </div>

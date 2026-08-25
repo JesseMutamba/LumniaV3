@@ -204,18 +204,33 @@ const origMonteRow = (d, cpoPrice, yieldFac, extractFac, opexFac) => {
 
   const s = renderToStaticMarkup(<ScenarioTab rows={ROWS} />);
   ok("ScenarioTab renders", s.length > 2000);
-  ok("ScenarioTab shows every scenario label",
-    ["Baisse", "Base", "Hausse", "Personnalisé"].every((l) => s.includes(l)));
+  ok("ScenarioTab defaults to English scenario labels",
+    ["Bear", "Base", "Bull", "Custom"].every((l) => s.includes(l)));
   ok("ScenarioTab renders one row per projection year",
     ROWS.every((r) => s.includes(">" + r.year + "<")));
   ok("ScenarioTab surfaces the collinearity note", s.includes("one lever"));
   ok("ScenarioTab handles empty rows", renderToStaticMarkup(<ScenarioTab rows={[]} />).includes("No projection data"));
+
+  const sf = renderToStaticMarkup(<ScenarioTab rows={ROWS} locale="fr" />);
+  ok("ScenarioTab locale=fr shows the French scenario labels",
+    ["Baisse", "Hausse", "Personnalisé"].every((l) => sf.includes(l)));
+  ok("ScenarioTab locale=fr translates the collinearity note", sf.includes("un seul levier"));
+  ok("ScenarioTab falls back to English on an unknown locale",
+    renderToStaticMarkup(<ScenarioTab rows={ROWS} locale="pt" />).includes("Bull"));
 
   const m = renderToStaticMarkup(<MonteCarloTab rows={ROWS} />);
   ok("MonteCarloTab renders", m.length > 2000);
   ok("MonteCarloTab exposes an extraction control (the original had none)",
     m.includes("Extraction factor"));
   ok("MonteCarloTab handles empty rows", renderToStaticMarkup(<MonteCarloTab rows={[]} />).includes("No projection data"));
+
+  const mf = renderToStaticMarkup(<MonteCarloTab rows={ROWS} locale="fr" />);
+  // No apostrophes in the probes: static markup escapes ' to &#x27;.
+  ok("MonteCarloTab locale=fr translates the controls",
+    ["Paramètres de simulation", "Nombre de tirages (N)", "Écart-type (σ)"]
+      .every((l) => mf.includes(l)));
+  ok("MonteCarloTab locale=fr handles empty rows",
+    renderToStaticMarkup(<MonteCarloTab rows={[]} locale="fr" />).includes("Aucune donnée de projection"));
 
   console.error = realError;
   var keyWarnings = warnings.filter((w) => /unique .?key/i.test(w));
