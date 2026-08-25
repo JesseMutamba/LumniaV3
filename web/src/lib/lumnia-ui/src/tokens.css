@@ -1,0 +1,65 @@
+/**
+ * lumnia-ui / tokens.css
+ *
+ * Same palette as tokens.js, exposed as CSS custom properties so
+ * plain CSS, Tailwind arbitrary values and non-React surfaces
+ * (PDF export templates, emails, the Viewer shell) can use it.
+ *
+ * Import once at the app root:  import "lumnia-ui/tokens.css";
+ */
+
+:root {
+  /* Surfaces */
+  --ln-bg: #f4f0e6;
+  --ln-panel: #fefcf8;
+  --ln-panel-2: #ede8dc;
+  --ln-border: #d5cebc;
+
+  /* Ink */
+  --ln-text: #1a1916;
+  --ln-muted: #8a8375;
+
+  /* Green value scale */
+  --ln-forest: #2c5f1a;
+  --ln-leaf: #4d8c2e;
+  --ln-sage: #7da05a;
+
+  /* Gold value scale */
+  --ln-gold: #a67c2a;
+  --ln-amber: #c8a04a;
+
+  /* Earth value scale */
+  --ln-earth: #7a4e2e;
+  --ln-clay: #9e6845;
+
+  /* Signal */
+  --ln-red: #b03a2a;
+
+  /* Semantic */
+  --ln-primary: var(--ln-forest);
+  --ln-secondary: var(--ln-gold);
+  --ln-cost: var(--ln-earth);
+  --ln-danger: var(--ln-red);
+
+  /* Scale */
+  --ln-space-xs: 4px;
+  --ln-space-sm: 8px;
+  --ln-space-md: 14px;
+  --ln-space-lg: 18px;
+  --ln-space-xl: 22px;
+  --ln-space-xxl: 32px;
+
+  --ln-radius-tooltip: 6px;
+  --ln-radius-card: 10px;
+  --ln-radius-bar: 2px;
+
+  --ln-shadow-tooltip: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  --ln-font-mono: monospace;
+}
+
+/* Opt-in page ground. Apply to body or the dashboard root. */
+.ln-paper {
+  background: var(--ln-bg);
+  color: var(--ln-text);
+}
