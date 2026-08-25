@@ -139,6 +139,20 @@ filled bar against a hatched envelope with a pace notch.
 ```
 Renders `sources[]`. Takes no payload — it is a view of the envelope.
 
+### `projection` — the rows behind the scenario and Monte Carlo tabs
+```json
+{"type":"projection","title":{"fr":"Projection 2026–2030","en":"…"},
+ "rows":[{"year":2026,"revenue":{Value},"opex":{Value},"capex":{Value},
+          "cpo":{Value}}]}
+```
+One row per plan year, minimum two. Each figure is a Value read from the
+plan workbook — this block publishes nothing simulated. The renderer feeds
+these rows to the scenario and Monte Carlo tabs, which compute in the
+reader's browser and stamp everything they draw as simulated (rule 5); the
+Monte Carlo run is seeded, so a figure in a client deck reproduces exactly.
+Added when PVAK asked for the tabs inside the Q1 report: a `table`'s rows
+are display cells, not a contract a model can read.
+
 ---
 
 ## Renderer rules

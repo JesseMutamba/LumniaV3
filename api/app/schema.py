@@ -189,14 +189,44 @@ class Ledger(Block):
     type: Literal["ledger"] = "ledger"
 
 
+class ProjectionRow(BaseModel):
+    """One projection year. The four figures the operating model reads, each
+    carrying the cell it came from. Anything the model does not read stays in
+    the workbook rather than riding along unsourced."""
+
+    model_config = ConfigDict(extra="forbid")
+    year: int
+    revenue: Value
+    opex: Value
+    capex: Value
+    cpo: Value | None = None  # tonnage, carried through the volume factors
+
+
+class Projection(Block):
+    """The plan's own trajectory, in the shape the scenario and Monte Carlo
+    tabs consume. The block holds only cell-sourced plan figures; every
+    simulated number is computed in the reader's browser from these rows and
+    is stamped as a simulation there (renderer rule 5). Nothing simulated is
+    ever published, so nothing simulated needs an address."""
+
+    type: Literal["projection"] = "projection"
+    title: Text | None = None
+    rows: list[ProjectionRow] = Field(min_length=2)
+
+
 AnyBlock = Annotated[
-    Union[Heading, Prose, KpiGrid, Rail, BarPair, Table, Flag, Ledger],
+    Union[Heading, Prose, KpiGrid, Rail, BarPair, Table, Flag, Ledger, Projection],
     Field(discriminator="type"),
 ]
 
 # The frozen set. Adding a type here is a deliberate act, not a reflex —
-# see docs/schema.md. Report #2 is the test of whether these eight hold.
-BLOCK_TYPES = ("heading", "prose", "kpiGrid", "rail", "barPair", "table", "flag", "ledger")
+# see docs/schema.md. `projection` was added when PVAK asked for the scenario
+# and Monte Carlo tabs inside the Q1 report: the tabs need typed yearly rows,
+# and a `table` block's rows are display cells, not a contract a model can read.
+BLOCK_TYPES = (
+    "heading", "prose", "kpiGrid", "rail", "barPair", "table", "flag", "ledger",
+    "projection",
+)
 
 
 # --------------------------------------------------------------------------

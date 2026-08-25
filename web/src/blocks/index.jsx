@@ -1,6 +1,16 @@
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import Prov from './Prov.jsx'
 import { fmt, signed, t, nf, MONTHS } from '../lib/format.js'
+
+/* The simulation tabs carry recharts and the lumnia-sim engine — a chunk
+   most reports never need, so it loads only when a projection block does. */
+const Simulation = lazy(() => import('./Simulation.jsx'))
+
+export const Sim = (props) => (
+  <Suspense fallback={<div className="b skel">…</div>}>
+    <Simulation {...props} />
+  </Suspense>
+)
 
 /* ------------------------------------------------------------------ text */
 
@@ -559,7 +569,7 @@ const Ledger = ({ locale, sources }) => {
 
 /* -------------------------------------------------------------- registry */
 
-const REGISTRY = { heading: Heading, prose: Prose, kpiGrid: KpiGrid, rail: Rail, barPair: BarPair, flag: Flag, table: Table, ledger: Ledger }
+const REGISTRY = { heading: Heading, prose: Prose, kpiGrid: KpiGrid, rail: Rail, barPair: BarPair, flag: Flag, table: Table, ledger: Ledger, projection: Sim }
 
 /**
  * Forward compatibility: the pipeline will always ship faster than the web

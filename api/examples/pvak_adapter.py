@@ -27,6 +27,8 @@ from .schema import (
     KpiGrid,
     Ledger,
     Period,
+    Projection,
+    ProjectionRow,
     Rail,
     RailRow,
     Report,
@@ -342,6 +344,23 @@ def build_pvak_q1(plan: Workbook, act: Workbook) -> Report:
                     "capex": _v(plan, "RECAP", 18, 4 + i, "USD", P),
                     "bal": _v(plan, "RECAP", 22, 4 + i, "USD", P),
                 }
+                for i in range(5)
+            ],
+        ),
+        # The rows behind the scenario and Monte Carlo tabs — the same RECAP
+        # cells as the table above, in the shape the operating model reads.
+        # PVAK asked for the tabs in the Q1 report; the tabs simulate in the
+        # reader's browser, so only the plan's own figures are published.
+        Projection(
+            title=Text(fr="Projection 2026–2030", en="Projection 2026–2030"),
+            rows=[
+                ProjectionRow(
+                    year=2026 + i,
+                    revenue=_v(plan, "RECAP", 7, 4 + i, "USD", P),
+                    opex=_v(plan, "RECAP", 14, 4 + i, "USD", P),
+                    capex=_v(plan, "RECAP", 18, 4 + i, "USD", P),
+                    cpo=_v(plan, "RECAP", 6, 4 + i, "t", P),
+                )
                 for i in range(5)
             ],
         ),

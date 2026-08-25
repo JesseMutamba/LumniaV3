@@ -174,7 +174,10 @@ h3.b-t{font-size:24px;line-height:1.16}
   font-family:var(--mono);font-size:11.5px;line-height:1;color:var(--mut-82)}
 
 /* --------------------------------------------------------------- barPair */
-svg{display:block;width:100%;height:auto;overflow:visible}
+/* Scoped to the report's own charts: a bare `svg` rule also catches the
+   14px legend icons recharts draws inside the simulation tabs, stretching
+   them across their labels and flattening the charts. */
+.card.chart>svg{display:block;width:100%;height:auto;overflow:visible}
 .gl{stroke:rgba(235,231,222,.07);stroke-width:1}
 .base{stroke:rgba(235,231,222,.2);stroke-width:1}
 .cut{stroke:rgba(200,168,76,.4);stroke-dasharray:3 5}
@@ -722,6 +725,17 @@ body:has(.doc.inst){background:var(--ln-bg)}
   border-bottom-color:var(--green-d);background:none}
 .doc.inst .foot .rule{color:var(--mut-5)}
 @media(max-width:760px){.doc.inst{padding:16px 13px 50px}}
+
+/* ------------------------------------------------- simulation (projection)
+   The scenario and Monte Carlo tabs from lumnia-sim. They draw themselves
+   with lumnia-ui inline styles, so the report page only supplies the stamp
+   renderer rule 5 demands: what the reader sees here is simulated, in their
+   browser, from the plan's published cells. */
+.sim-head{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;margin-bottom:16px}
+.sim-head .lens{margin:0}
+.sim-stamp{font-family:var(--sans);font-size:12px;line-height:1.5;color:var(--mut-6);
+  max-width:78ch}
+.sim-stamp b{color:var(--ink);font-weight:600}
 
 /* Chart tooltip. Replaces SVG <title>, which waits a second before it
    appears, cannot be styled, and never shows on a touch screen at all. */

@@ -1,0 +1,23 @@
+{
+  "name": "lumnia-sim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scenario analysis and seeded Monte Carlo for the palm oil operating model, plus the two dashboard tabs.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./ui": "./ui/index.js"
+  },
+  "files": ["src", "ui"],
+  "peerDependencies": {
+    "react": ">=18",
+    "recharts": ">=3",
+    "lumnia-ui": "*"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "recharts": { "optional": true },
+    "lumnia-ui": { "optional": true }
+  }
+}

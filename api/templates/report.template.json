@@ -79,6 +79,29 @@
                    "src": { "file": 0, "sheet": "RECAP", "cells": "D22" } } }
       ] },
 
+    { "type": "projection",
+      "title": { "fr": "Projection 2026–2030", "en": "Projection 2026–2030" },
+      "rows": [
+        { "year": 2026,
+          "revenue": { "n": 771190, "unit": "USD",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "D7" } },
+          "opex":    { "n": 457299.97, "unit": "USD",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "D14" } },
+          "capex":   { "n": 870110, "unit": "USD",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "D18" } },
+          "cpo":     { "n": 771.19, "unit": "t",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "D6" } } },
+        { "year": 2027,
+          "revenue": { "n": 1584000, "unit": "USD",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "E7" } },
+          "opex":    { "n": 640220, "unit": "USD",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "E14" } },
+          "capex":   { "n": 512000, "unit": "USD",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "E18" } },
+          "cpo":     { "n": 1584, "unit": "t",
+                       "src": { "file": 0, "sheet": "RECAP", "cells": "E6" } } }
+      ] },
+
     { "type": "prose",
       "text": { "fr": "Paragraphe libre.", "en": "Free paragraph." } },
 

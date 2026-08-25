@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import Block from './blocks/index.jsx'
+import Block, { Sim } from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import Landing from './pages/Landing.jsx'
@@ -249,22 +249,34 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
   // A long report is a document nobody finishes. Its own level-2 headings
   // are its sections, so they become the tabs — no extra structure to keep
   // in step, and a report written without headings still reads as one page.
+  // A projection block is the exception: it carries the rows the scenario
+  // and Monte Carlo tabs consume, so it becomes those two tabs rather than
+  // a panel lost mid-section — that is what the client asked to open.
   const tabs = useMemo(() => {
     if (!rep) return []
     const out = []
+    let cur = null // the section receiving ordinary blocks
     for (const b of rep.blocks) {
       const isSection = b.type === 'heading' && (b.level ?? 2) <= 2
       if (b.type === 'ledger') {
         out.push({ key: 'src', label: L ? 'Sources' : 'Sources', blocks: [b] })
         continue
       }
-      if (isSection || !out.length) {
+      if (b.type === 'projection') {
+        out.push(
+          { key: `sim${out.length}s`, label: L ? 'Scénarios' : 'Scenarios', sim: { b, mode: 'scenario' }, blocks: [] },
+          { key: `sim${out.length}m`, label: 'Monte Carlo', sim: { b, mode: 'monte' }, blocks: [] }
+        )
+        continue
+      }
+      if (isSection || !cur) {
         const label = isSection
           ? t(b.label, locale) || t(b.text, locale)
           : L ? 'Rapport' : 'Report'
-        out.push({ key: `s${out.length}`, label, blocks: [] })
+        cur = { key: `s${out.length}`, label, blocks: [] }
+        out.push(cur)
       }
-      out[out.length - 1].blocks.push(b)
+      cur.blocks.push(b)
     }
     if (hasDashboard(rep)) {
       out.unshift({
@@ -309,6 +321,8 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
 
   if (!rep) return <div className="doc inst skel">…</div>
 
+  const active = tabs.find((tb) => tb.key === lens) || tabs[0]
+
   return (
     <div className="doc inst">
       <div className="rep-head">
@@ -337,12 +351,16 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
 
       {lens === 'dash' ? (
         <Dashboard rep={rep} locale={locale} />
+      ) : active.sim ? (
+        // The simulation tabs bring their own layout, so they take the page
+        // the way the dashboard does rather than entering the panel grid.
+        <Sim b={active.sim.b} mode={active.sim.mode} locale={locale} sources={rep.sources} />
       ) : (
         // Wrapped so the institutional theme can lay panels out side by side.
         // A chart given the full width of the page is a chart nobody can read
         // against the one beside it.
         <div className="body">
-          {(tabs.find((tb) => tb.key === lens) || tabs[0]).blocks.map((b, i) => (
+          {active.blocks.map((b, i) => (
             <Block key={i} b={b} locale={locale} sources={rep.sources} />
           ))}
         </div>

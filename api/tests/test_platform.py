@@ -74,7 +74,10 @@ def test_implied_price_flags_inconsistency():
 def test_platform_boots_empty(client):
     h = client.get("/v1/health").json()
     assert h["ok"] and h["publishing_enabled"]
-    assert len(h["block_types"]) == 8
+    # 8 original types + projection, added when PVAK asked for the scenario
+    # and Monte Carlo tabs in the Q1 report
+    assert len(h["block_types"]) == 9
+    assert "projection" in h["block_types"]
 
 
 def test_unknown_org_404s(client):
@@ -107,6 +110,41 @@ def test_publish_rejects_unsourced_value(client, auth, org):
     bad = doc("r-bad")
     bad["blocks"][0]["items"][0]["value"] = {"n": 1.0, "unit": "USD"}
     assert client.post(f"/v1/orgs/{org}/reports", json=bad, headers=auth).status_code == 422
+
+
+def _projection_rows():
+    v = lambda n, unit, cells: {"n": n, "unit": unit,
+                                "src": {"file": 0, "sheet": "RECAP", "cells": cells}}
+    return [
+        {"year": 2026 + i,
+         "revenue": v(700000.0 * (i + 1), "USD", f"D{7 + i}"),
+         "opex": v(400000.0, "USD", f"D{14 + i}"),
+         "capex": v(300000.0, "USD", f"D{18 + i}"),
+         "cpo": v(700.0 * (i + 1), "t", f"D{6 + i}")}
+        for i in range(2)
+    ]
+
+
+def test_publish_accepts_projection_block(client, auth, org):
+    d = doc("r-proj")
+    d["blocks"].append({"type": "projection",
+                        "title": {"fr": "Projection"},
+                        "rows": _projection_rows()})
+    assert client.post(f"/v1/orgs/{org}/reports", json=d, headers=auth).status_code == 201
+
+
+def test_projection_rows_require_sources(client, auth, org):
+    d = doc("r-proj-bad")
+    rows = _projection_rows()
+    del rows[0]["revenue"]["src"]
+    d["blocks"].append({"type": "projection", "rows": rows})
+    assert client.post(f"/v1/orgs/{org}/reports", json=d, headers=auth).status_code == 422
+
+
+def test_projection_needs_at_least_two_years(client, auth, org):
+    d = doc("r-proj-short")
+    d["blocks"].append({"type": "projection", "rows": _projection_rows()[:1]})
+    assert client.post(f"/v1/orgs/{org}/reports", json=d, headers=auth).status_code == 422
 
 
 def test_publish_rejects_unknown_block_type(client, auth, org):

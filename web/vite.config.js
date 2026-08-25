@@ -10,6 +10,8 @@ export default defineConfig({
     alias: [
       { find: 'lumnia-ui/tokens.css', replacement: '/src/lib/lumnia-ui/src/tokens.css' },
       { find: 'lumnia-ui', replacement: '/src/lib/lumnia-ui/src/index.js' },
+      { find: 'lumnia-sim/ui', replacement: '/src/lib/lumnia-sim/ui/index.js' },
+      { find: 'lumnia-sim', replacement: '/src/lib/lumnia-sim/src/index.js' },
     ],
   },
   server: {
