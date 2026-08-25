@@ -285,7 +285,12 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
         blocks: [],
       })
     }
-    return out
+    // A section whose ledger or projection moved into its own tab can be
+    // left holding nothing but its heading — an empty page with a title.
+    // "03 · Sources" beside "Sources" is the canonical case.
+    return out.filter(
+      (tb) => tb.key === 'dash' || tb.sim || tb.blocks.some((b) => b.type !== 'heading')
+    )
   }, [rep, locale, L])
 
   useEffect(() => {
