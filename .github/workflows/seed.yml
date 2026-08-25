@@ -40,16 +40,29 @@ jobs:
           import json
           print(' '.join(sorted({b['type'] for b in json.load(open('api/templates/report.template.json'))['blocks']})))")
           echo "template needs: $NEEDED"
-          for i in $(seq 1 40); do
+          READY=no
+          for i in $(seq 1 60); do
             if curl -sS -m 20 "$API/health" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
           have = set(d.get('block_types', []))
           sys.exit(0 if d.get('ok') and set('$NEEDED'.split()) <= have else 1)" 2>/dev/null; then
-              echo "api is up and speaks the template's block types"; break
+              echo "api is up and speaks the template's block types"; READY=yes; break
             fi
             echo "waiting for the new deploy ($i)"; sleep 15
           done
+          # Publishing against a deploy that lacks a block type is three
+          # guaranteed 422s; diagnose instead, and leave the retry to a
+          # re-run once the Render dashboard says why the deploy is absent.
+          if [ "$READY" != "yes" ]; then
+            echo "The live API never advertised the template's block types."
+            echo "It currently serves:"
+            curl -sS -m 20 "$API/health" || true
+            echo
+            echo "Check the Render dashboard (lumnia-api > Events) for a stuck or"
+            echo "failed deploy, then re-run this workflow."
+            exit 1
+          fi
           # Create the client; a duplicate is fine, publishing below is the test.
           curl -sS -X POST "$API/orgs" \
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
