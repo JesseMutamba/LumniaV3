@@ -1,110 +1,1193 @@
 {
   "id": "pvak-fy26-q1",
   "org": "pvak",
-  "title":  { "fr": "Budget contre réalité", "en": "Budget vs reality" },
-  "period": { "label": { "fr": "T1 2026", "en": "Q1 2026" },
-              "start": "2026-01-01", "end": "2026-03-31" },
+  "title": {
+    "fr": "Budget contre réalité",
+    "en": "Budget vs reality"
+  },
+  "period": {
+    "label": {
+      "fr": "T1 2026",
+      "en": "Q1 2026"
+    },
+    "start": "2026-01-01",
+    "end": "2026-03-31"
+  },
   "status": "published",
+  "generated_at": "2026-08-25T17:48:41.504569Z",
+  "pipeline_version": "0.1.0",
   "default_locale": "fr",
-  "pipeline_version": "0.2.0",
-
   "sources": [
-    { "idx": 0, "filename": "Montage_financier_2025_a_2030.xlsx",
-      "sheets": 9, "rows_read": 1419, "checks_run": 12, "checks_passed": 12 },
-    { "idx": 1, "filename": "SUIVI_FINANCES_PVAK.xlsx",
-      "sheets": 7, "rows_read": 1006, "checks_run": 9, "checks_passed": 9 }
+    {
+      "idx": 0,
+      "filename": "Montage_financier_2025_a_2030.xlsx",
+      "sha256": "ba93bd24007b9cd6953081f54372ee4f941480177dc2811a29f626e0dc2d71d2",
+      "sheets": 9,
+      "rows_read": 607,
+      "checks_run": 12,
+      "checks_passed": 12
+    },
+    {
+      "idx": 1,
+      "filename": "SUIVI_FINANCES_PVAK.xlsx",
+      "sha256": "915f91a3b911cebd7bc24287d2f442f90ee9888e44aef192b043399f63b2370a",
+      "sheets": 7,
+      "rows_read": 931,
+      "checks_run": 9,
+      "checks_passed": 9
+    }
   ],
-
   "blocks": [
-    { "type": "heading", "level": 2,
-      "label": { "fr": "01 · Exécution", "en": "01 · Execution" },
-      "text":  { "fr": "Titre de section.", "en": "Section headline." },
-      "dek":   { "fr": "Une ou deux phrases.", "en": "A sentence or two." } },
-
-    { "type": "rail",
+    {
+      "type": "heading",
+      "level": 2,
+      "label": {
+        "fr": "01 · Exécution",
+        "en": "01 · Execution"
+      },
+      "text": {
+        "fr": "La sous-consommation est réelle, mais elle n'est pas une économie.",
+        "en": "The underspend is real, but it is not a saving."
+      },
+      "dek": {
+        "fr": "L'essentiel du retard porte sur le CAPEX pépinière et replanting — les hectares à planter en 2026 qui portent le chiffre d'affaires de 2029 et 2030.",
+        "en": "Most of the shortfall sits in nursery and replanting CAPEX — the hectares due for planting in 2026 that carry the 2029 and 2030 revenue lines."
+      }
+    },
+    {
+      "type": "prose",
+      "text": {
+        "fr": "Le T1 s'exécute à 40 % du rythme prévu. L'écart n'est pas une économie : il se concentre sur le CAPEX pépinière et replanting — les hectares de 2026 qui portent les revenus de 2029 et 2030 — pendant que le coût cash par tonne, à 982 $, frôle le prix du plan à 1 000 $. Les onglets Scénarios et Monte Carlo mesurent ce que ce retard fait à la trajectoire 2026–2030.",
+        "en": "Q1 is executing at 40% of planned pace. The shortfall is not a saving: it sits in nursery and replanting CAPEX — the 2026 hectares that carry 2029 and 2030 revenue — while cash cost per tonne, at $982, is brushing the plan's $1,000 price. The Scenarios and Monte Carlo tabs measure what that delay does to the 2026–2030 trajectory."
+      }
+    },
+    {
+      "type": "rail",
       "rows": [
-        { "label": { "fr": "OPEX", "en": "OPEX" },
-          "envelope": { "n": 457299.97, "unit": "USD", "derived": "sum",
-                        "src": { "file": 0, "sheet": "opex", "cells": "C96:N96" } },
-          "pace":     { "n": 112900.00, "unit": "USD", "derived": "sum",
-                        "src": { "file": 0, "sheet": "opex", "cells": "C96:E96" } },
-          "actual":   { "n": 44623.60, "unit": "USD", "derived": "sum",
-                        "src": { "file": 1, "sheet": "COUT DE PRODUCTION (OPEX)", "cells": "D43:F43" } } }
-      ] },
-
-    { "type": "kpiGrid",
+        {
+          "label": {
+            "fr": "Dépenses totales",
+            "en": "Total spend"
+          },
+          "envelope": {
+            "n": 1327409.9727114604,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "opex + capex",
+              "cells": "C96:N96 + F18:Q18 + F30:Q30"
+            },
+            "derived": "sum"
+          },
+          "pace": {
+            "n": 438819.99317786517,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "capex",
+              "cells": "F18:H18 + F30:H30"
+            },
+            "derived": "sum"
+          },
+          "actual": {
+            "n": 176537.73658119657,
+            "unit": "USD",
+            "src": {
+              "file": 1,
+              "sheet": "OPEX + CAPEX",
+              "cells": "D43:F43 + D28:F28"
+            },
+            "derived": "sum"
+          }
+        },
+        {
+          "label": {
+            "fr": "OPEX",
+            "en": "OPEX"
+          },
+          "envelope": {
+            "n": 457299.9727114605,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "opex ",
+              "cells": "C96:N96"
+            },
+            "derived": "sum"
+          },
+          "pace": {
+            "n": 112899.99317786514,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "opex ",
+              "cells": "C96:E96"
+            },
+            "derived": "sum"
+          },
+          "actual": {
+            "n": 44623.605470085466,
+            "unit": "USD",
+            "src": {
+              "file": 1,
+              "sheet": "COUT DE PRODUCTION (OPEX)",
+              "cells": "D43:F43"
+            },
+            "derived": "sum"
+          }
+        },
+        {
+          "label": {
+            "fr": "CAPEX",
+            "en": "CAPEX"
+          },
+          "envelope": {
+            "n": 870110.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "capex",
+              "cells": "F18:Q18 + F30:Q30"
+            },
+            "derived": "sum"
+          },
+          "pace": {
+            "n": 325920.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "capex",
+              "cells": "F18:H18 + F30:H30"
+            },
+            "derived": "sum"
+          },
+          "actual": {
+            "n": 131914.1311111111,
+            "unit": "USD",
+            "src": {
+              "file": 1,
+              "sheet": "INVESTISSEMENTS (CAPEX)",
+              "cells": "D28:F28"
+            },
+            "derived": "sum"
+          }
+        }
+      ]
+    },
+    {
+      "type": "kpiGrid",
       "items": [
-        { "label": { "fr": "Exécution T1", "en": "Q1 execution" },
+        {
+          "label": {
+            "fr": "Exécution T1",
+            "en": "Q1 execution"
+          },
+          "value": {
+            "n": 0.402301033056261,
+            "unit": "ratio",
+            "src": {
+              "file": 1,
+              "sheet": "COUT DE PRODUCTION (OPEX)",
+              "cells": "D43:F43"
+            },
+            "derived": "ratio"
+          },
+          "sub": {
+            "fr": "176,538 $ contre 438,820 $",
+            "en": "$176,538 against $438,820"
+          },
           "tone": "warn",
-          "sub":  { "fr": "176 538 $ contre 438 820 $", "en": "$176,538 against $438,820" },
-          "value": { "n": 0.402, "unit": "ratio", "derived": "ratio",
-                     "src": { "file": 1, "sheet": "TOTAUX", "cells": "D30:F30" } } }
-      ] },
-
-    { "type": "barPair",
-      "title": { "fr": "Sorties mensuelles (USD)", "en": "Monthly outflows (USD)" },
-      "sub":   { "fr": "Jan–Déc 2026", "en": "Jan–Dec 2026" },
-      "x": "months", "fmt": "k", "cutoff": 3,
+          "lineage": []
+        },
+        {
+          "label": {
+            "fr": "Écart contre rythme",
+            "en": "Variance to pace"
+          },
+          "value": {
+            "n": -262282.2565966686,
+            "unit": "USD",
+            "src": {
+              "file": 1,
+              "sheet": "COUT DE PRODUCTION (OPEX)",
+              "cells": "D43:F43"
+            },
+            "derived": "delta"
+          },
+          "sub": {
+            "fr": "OPEX -68,276 $ · CAPEX -194,006 $",
+            "en": "OPEX $-68,276 · CAPEX $-194,006"
+          },
+          "tone": "neutral",
+          "lineage": []
+        },
+        {
+          "label": {
+            "fr": "Régimes livrés T1",
+            "en": "Fruit delivered Q1"
+          },
+          "value": {
+            "n": 211.39999999999998,
+            "unit": "t",
+            "src": {
+              "file": 1,
+              "sheet": "COUT DE PRODUCTION (OPEX)",
+              "cells": "D44:F44"
+            },
+            "derived": "sum"
+          },
+          "sub": {
+            "fr": "contre 658 t · 32.1%",
+            "en": "against 658 t · 32.1%"
+          },
+          "tone": "warn",
+          "lineage": []
+        },
+        {
+          "label": {
+            "fr": "Coût cash / t CPO",
+            "en": "Cash cost / t CPO"
+          },
+          "value": {
+            "n": 982.4659944976985,
+            "unit": "USD/t",
+            "src": {
+              "file": 1,
+              "sheet": "COUT DE PRODUCTION (OPEX)",
+              "cells": "D43:F43"
+            },
+            "derived": "ratio"
+          },
+          "sub": {
+            "fr": "Prix au plan 1,000 $/t",
+            "en": "Plan price $1,000/t"
+          },
+          "tone": "warn",
+          "lineage": []
+        }
+      ]
+    },
+    {
+      "type": "barPair",
+      "title": {
+        "fr": "Sorties de fonds mensuelles (USD)",
+        "en": "Monthly cash outflows (USD)"
+      },
+      "sub": {
+        "fr": "Jan–Déc 2026",
+        "en": "Jan–Dec 2026"
+      },
+      "x": "months",
       "series": [
-        { "key": "plan", "label": { "fr": "Prévu", "en": "Plan" },
-          "values": [ { "n": 37500, "unit": "USD",
-                        "src": { "file": 0, "sheet": "opex", "cells": "C96" } } ] },
-        { "key": "actual", "label": { "fr": "Réel", "en": "Actual" },
-          "values": [ { "n": 20269.56, "unit": "USD",
-                        "src": { "file": 1, "sheet": "TOTAUX", "cells": "D30" } } ] }
-      ] },
-
-    { "type": "flag", "severity": "caught",
-      "tag":   { "fr": "Piège détecté", "en": "Trap caught" },
-      "title": { "fr": "Titre du constat", "en": "Finding headline" },
-      "body":  { "fr": "Ce qui a été trouvé et pourquoi cela change un chiffre.",
-                 "en": "What was found and why it changes a number." },
-      "src": { "file": 0, "sheet": "salaires 2026", "cells": "B115:C127" },
-      "evidence": { "kind": "tree", "payload": {
-        "parents": [ { "parent": "PLANTATIONS", "value": 87930.28, "delta": 0.0,
-          "children": [ { "name": "PRODUCTION", "value": 36218.48 } ] } ],
-        "naive_sum": 363426.08, "correct_sum": 181713.04, "overstatement": 181713.04 } } },
-
-    { "type": "table",
+        {
+          "key": "plan",
+          "label": {
+            "fr": "Prévu",
+            "en": "Plan"
+          },
+          "values": [
+            {
+              "n": 37499.99772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col3"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 183649.99772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col4"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 217669.99772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col5"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 67312.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col6"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 103392.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col7"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 155432.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col8"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 74132.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col9"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 158032.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col10"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 156482.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col11"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 46162.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col12"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 85642.49772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col13"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 41999.99772595504,
+              "unit": "USD",
+              "src": {
+                "file": 0,
+                "sheet": "opex + capex",
+                "cells": "col14"
+              },
+              "derived": "sum"
+            }
+          ]
+        },
+        {
+          "key": "actual",
+          "label": {
+            "fr": "Réel",
+            "en": "Actual"
+          },
+          "values": [
+            {
+              "n": 20269.555555555555,
+              "unit": "USD",
+              "src": {
+                "file": 1,
+                "sheet": "OPEX + CAPEX",
+                "cells": "col4"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 91703.8476923077,
+              "unit": "USD",
+              "src": {
+                "file": 1,
+                "sheet": "OPEX + CAPEX",
+                "cells": "col5"
+              },
+              "derived": "sum"
+            },
+            {
+              "n": 64564.33333333333,
+              "unit": "USD",
+              "src": {
+                "file": 1,
+                "sheet": "OPEX + CAPEX",
+                "cells": "col6"
+              },
+              "derived": "sum"
+            }
+          ]
+        }
+      ],
+      "cutoff": 3,
+      "fmt": "k"
+    },
+    {
+      "type": "flag",
+      "severity": "caught",
+      "tag": {
+        "fr": "Piège détecté · hiérarchie à plat",
+        "en": "Trap caught · flattened hierarchy"
+      },
+      "title": {
+        "fr": "Salaires 2026 · une colonne, deux niveaux",
+        "en": "Salaries 2026 · one column, two levels"
+      },
+      "body": {
+        "fr": "Trois divisions sont les totaux de leurs propres services, listés juste en dessous d'elles, sans indentation ni niveau. Le contrôle CH-001 les identifie à zéro écart. Sommer la colonne surévaluerait la masse salariale de 181,713.04 $.",
+        "en": "Three divisions are the totals of their own services, listed directly beneath them with no indentation and no level marker. Check CH-001 identifies them at zero variance. Summing the column would overstate payroll by $181,713.04."
+      },
+      "src": {
+        "file": 0,
+        "sheet": "salaires 2026",
+        "cells": "B115:C127"
+      },
+      "evidence": {
+        "kind": "tree",
+        "payload": {
+          "parents": [
+            {
+              "parent": "PLANTATIONS",
+              "parent_row": 0,
+              "value": 87930.2759696411,
+              "children": [
+                {
+                  "name": "PRODUCTION",
+                  "value": 36218.478406564165
+                },
+                {
+                  "name": "MAINTENANCE DES BLOCS",
+                  "value": 39432.50163692308
+                },
+                {
+                  "name": "AGRITECH/HSE",
+                  "value": 12279.295926153845
+                }
+              ],
+              "delta": 0.0
+            },
+            {
+              "parent": "TECHNIQUES",
+              "parent_row": 4,
+              "value": 43224.02790643083,
+              "children": [
+                {
+                  "name": "USINE",
+                  "value": 27527.05802483082
+                },
+                {
+                  "name": "CONSTRUCTION",
+                  "value": 3541.2006508307695
+                },
+                {
+                  "name": "GARAGE/TRANSPORT",
+                  "value": 12155.76923076923
+                }
+              ],
+              "delta": 0.0
+            },
+            {
+              "parent": "ADMINISTRATION",
+              "parent_row": 8,
+              "value": 50558.738461538465,
+              "children": [
+                {
+                  "name": "RESSOURCES HUMAINES",
+                  "value": 18027.584615384614
+                },
+                {
+                  "name": "COMPTABILITE",
+                  "value": 8451.153846153848
+                },
+                {
+                  "name": "INFORMATIQUE/REPORTING",
+                  "value": 4051.923076923077
+                },
+                {
+                  "name": "SECURITE",
+                  "value": 20028.076923076922
+                }
+              ],
+              "delta": 0.0
+            }
+          ],
+          "naive_sum": 363426.08,
+          "correct_sum": 181713.04,
+          "overstatement": 181713.04
+        }
+      }
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "label": {
+        "fr": "02 · Projection",
+        "en": "02 · Forward view"
+      },
+      "text": {
+        "fr": "Le plan prévoit deux exercices négatifs avant l'équilibre.",
+        "en": "The plan runs two negative years before it breaks even."
+      }
+    },
+    {
+      "type": "table",
       "columns": [
-        { "key": "year",  "label": { "fr": "Année",  "en": "Year" },    "align": "left" },
-        { "key": "rev",   "label": { "fr": "Revenus","en": "Revenue" }, "money": true },
-        { "key": "bal",   "label": { "fr": "Solde",  "en": "Balance" }, "money": true, "signed": true }
+        {
+          "key": "year",
+          "label": {
+            "fr": "Année",
+            "en": "Year"
+          },
+          "align": "left",
+          "money": false,
+          "signed": false
+        },
+        {
+          "key": "ha",
+          "label": {
+            "fr": "Hectares",
+            "en": "Hectares"
+          },
+          "align": "right",
+          "money": false,
+          "signed": false
+        },
+        {
+          "key": "cpo",
+          "label": {
+            "fr": "CPO (t)",
+            "en": "CPO (t)"
+          },
+          "align": "right",
+          "money": false,
+          "signed": false
+        },
+        {
+          "key": "rev",
+          "label": {
+            "fr": "Revenus",
+            "en": "Revenue"
+          },
+          "align": "right",
+          "money": true,
+          "signed": false
+        },
+        {
+          "key": "opex",
+          "label": {
+            "fr": "OPEX",
+            "en": "OPEX"
+          },
+          "align": "right",
+          "money": true,
+          "signed": false
+        },
+        {
+          "key": "capex",
+          "label": {
+            "fr": "CAPEX",
+            "en": "CAPEX"
+          },
+          "align": "right",
+          "money": true,
+          "signed": false
+        },
+        {
+          "key": "bal",
+          "label": {
+            "fr": "Solde",
+            "en": "Balance"
+          },
+          "align": "right",
+          "money": true,
+          "signed": true
+        }
       ],
       "rows": [
-        { "year": "2026",
-          "rev": { "n": 771190, "unit": "USD",
-                   "src": { "file": 0, "sheet": "RECAP", "cells": "D7" } },
-          "bal": { "n": -556219.97, "unit": "USD",
-                   "src": { "file": 0, "sheet": "RECAP", "cells": "D22" } } }
-      ] },
-
-    { "type": "projection",
-      "title": { "fr": "Projection 2026–2030", "en": "Projection 2026–2030" },
+        {
+          "year": "2026",
+          "ha": {
+            "n": 800.0,
+            "unit": "ha",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D4"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 771.19,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D6"
+            },
+            "derived": "read"
+          },
+          "rev": {
+            "n": 771190.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 457299.97271146055,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 870110.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D18"
+            },
+            "derived": "read"
+          },
+          "bal": {
+            "n": -556219.9727114607,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D22"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": "2027",
+          "ha": {
+            "n": 1200.0,
+            "unit": "ha",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E4"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 1081.92,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E6"
+            },
+            "derived": "read"
+          },
+          "rev": {
+            "n": 1081920.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 641556.5379167045,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 638180.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E18"
+            },
+            "derived": "read"
+          },
+          "bal": {
+            "n": -197816.53791670455,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E22"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": "2028",
+          "ha": {
+            "n": 1100.0,
+            "unit": "ha",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F4"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 1539.16,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F6"
+            },
+            "derived": "read"
+          },
+          "rev": {
+            "n": 1539160.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 912690.5509648356,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 621725.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F18"
+            },
+            "derived": "read"
+          },
+          "bal": {
+            "n": 4744.4490351644345,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F22"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": "2029",
+          "ha": {
+            "n": 1100.0,
+            "unit": "ha",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G4"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 2821.1800000000003,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G6"
+            },
+            "derived": "read"
+          },
+          "rev": {
+            "n": 2821180.0000000005,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 1672902.3159197061,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 582215.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G18"
+            },
+            "derived": "read"
+          },
+          "bal": {
+            "n": 566062.6840802943,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G22"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": "2030",
+          "ha": {
+            "n": 1021.0,
+            "unit": "ha",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H4"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 5227.67,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H6"
+            },
+            "derived": "read"
+          },
+          "rev": {
+            "n": 5227670.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 3099901.9027016954,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 130380.75,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H18"
+            },
+            "derived": "read"
+          },
+          "bal": {
+            "n": 1997387.3472983046,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H22"
+            },
+            "derived": "read"
+          }
+        }
+      ]
+    },
+    {
+      "type": "projection",
+      "title": {
+        "fr": "Projection 2026–2030",
+        "en": "Projection 2026–2030"
+      },
       "rows": [
-        { "year": 2026,
-          "revenue": { "n": 771190, "unit": "USD",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "D7" } },
-          "opex":    { "n": 457299.97, "unit": "USD",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "D14" } },
-          "capex":   { "n": 870110, "unit": "USD",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "D18" } },
-          "cpo":     { "n": 771.19, "unit": "t",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "D6" } } },
-        { "year": 2027,
-          "revenue": { "n": 1584000, "unit": "USD",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "E7" } },
-          "opex":    { "n": 640220, "unit": "USD",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "E14" } },
-          "capex":   { "n": 512000, "unit": "USD",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "E18" } },
-          "cpo":     { "n": 1584, "unit": "t",
-                       "src": { "file": 0, "sheet": "RECAP", "cells": "E6" } } }
-      ] },
-
-    { "type": "prose",
-      "text": { "fr": "Paragraphe libre.", "en": "Free paragraph." } },
-
-    { "type": "ledger" }
+        {
+          "year": 2026,
+          "revenue": {
+            "n": 771190.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 457299.97271146055,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 870110.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D18"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 771.19,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "D6"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": 2027,
+          "revenue": {
+            "n": 1081920.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 641556.5379167045,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 638180.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E18"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 1081.92,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "E6"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": 2028,
+          "revenue": {
+            "n": 1539160.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 912690.5509648356,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 621725.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F18"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 1539.16,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "F6"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": 2029,
+          "revenue": {
+            "n": 2821180.0000000005,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 1672902.3159197061,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 582215.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G18"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 2821.1800000000003,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "G6"
+            },
+            "derived": "read"
+          }
+        },
+        {
+          "year": 2030,
+          "revenue": {
+            "n": 5227670.0,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H7"
+            },
+            "derived": "read"
+          },
+          "opex": {
+            "n": 3099901.9027016954,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H14"
+            },
+            "derived": "read"
+          },
+          "capex": {
+            "n": 130380.75,
+            "unit": "USD",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H18"
+            },
+            "derived": "read"
+          },
+          "cpo": {
+            "n": 5227.67,
+            "unit": "t",
+            "src": {
+              "file": 0,
+              "sheet": "RECAP",
+              "cells": "H6"
+            },
+            "derived": "read"
+          }
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "label": {
+        "fr": "03 · Sources",
+        "en": "03 · Sources"
+      },
+      "text": {
+        "fr": "Chaque chiffre de ce rapport remonte à une cellule.",
+        "en": "Every figure in this report traces to a cell."
+      }
+    },
+    {
+      "type": "ledger"
+    }
   ]
 }
