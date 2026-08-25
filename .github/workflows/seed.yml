@@ -2,7 +2,9 @@
 # report. Idempotent — re-running keeps the existing share key. Requires the
 # LUMNIA_ADMIN_TOKEN repository secret (Settings > Secrets and variables >
 # Actions); without it the job exits quietly so ordinary pushes never fail
-# on a missing secret.
+# on a missing secret. The optional RENDER_DEPLOY_HOOK secret (the URL from
+# the Render service's Settings > Deploy Hook) lets this workflow start the
+# deploy it waits for, instead of relying on Render's auto-deploy.
 name: Seed first client and report
 
 # Re-runnable at any time — publishing the same report again is a no-op that

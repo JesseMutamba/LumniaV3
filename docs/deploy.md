@@ -24,6 +24,13 @@ Optional env var: `ANTHROPIC_API_KEY` enables the Claude rewrite in the
 `narrate` module; without it, narration falls back to deterministic
 templates.
 
+Render's auto-deploy can silently stop firing while the old instance keeps
+serving — a broken GitHub connection looks exactly like a healthy service.
+Copy the service's **Settings → Deploy Hook** URL into the
+`RENDER_DEPLOY_HOOK` repository secret and the seed workflow becomes the
+whole publish chain: it triggers the deploy itself, waits until `/v1/health`
+advertises every block type the report template uses, then publishes.
+
 The disk requires Render's starter plan; on the free tier the SQLite file
 would reset on every restart, which defeats the point of publishing.
 
