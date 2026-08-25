@@ -20,6 +20,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Render's auto-deploy can silently stop firing (the GitHub connection
+      # breaks, or the toggle is off) while the old instance keeps serving.
+      # A deploy hook bypasses that connection entirely: POSTing it starts a
+      # deploy of the tracked branch at its latest commit. Copy the URL from
+      # the Render service (Settings > Deploy Hook) into the
+      # RENDER_DEPLOY_HOOK repository secret and this workflow becomes the
+      # whole chain: deploy, wait for the new code, publish.
+      - name: Trigger a Render deploy (when the hook secret is set)
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK secret not set - relying on Render auto-deploy."
+            echo "If deploys are not happening, copy the Deploy Hook URL from the"
+            echo "Render service (Settings > Deploy Hook) into that secret."
+            exit 0
+          fi
+          curl -sS -X POST "$HOOK"
+          echo
+          echo "deploy triggered"
       - name: Create client and publish template report
         env:
           TOKEN: ${{ secrets.LUMNIA_ADMIN_TOKEN }}
