@@ -11,7 +11,7 @@ name: Seed first client and report
 # keeps its share key.
 on:
   push:
-    branches: [claude/new-session-h91lyu, main]
+    branches: [main]
     paths:
       - ".github/workflows/seed.yml"
       - "api/templates/**"

@@ -5,7 +5,7 @@ name: Smoke check
 
 on:
   push:
-    branches: [claude/new-session-h91lyu, main]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
