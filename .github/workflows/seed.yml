@@ -41,7 +41,9 @@ jobs:
           fi
           # -f: an HTTP error from the hook must fail this step loudly, not
           # print an error body and count as a triggered deploy.
-          curl -fsS -X POST "$HOOK"
+          # The response names the deploy Render created; keep it so a
+          # failed wait can point at the exact deploy to open in Events.
+          curl -fsS -X POST "$HOOK" | tee deploy.json
           echo
           echo "deploy triggered"
       - name: Create client and publish template report
@@ -83,8 +85,13 @@ jobs:
             echo "It currently serves:"
             curl -sS -m 20 "$API/health" || true
             echo
-            echo "Check the Render dashboard (lumnia-api > Events) for a stuck or"
-            echo "failed deploy, then re-run this workflow."
+            if [ -f deploy.json ]; then
+              echo "This run asked Render for exactly this deploy, which never went live:"
+              cat deploy.json
+              echo
+            fi
+            echo "Open that deploy in the Render dashboard (lumnia-api > Events) —"
+            echo "its build log holds the reason — then re-run this workflow."
             exit 1
           fi
           # Create the client; a duplicate is fine, publishing below is the test.
