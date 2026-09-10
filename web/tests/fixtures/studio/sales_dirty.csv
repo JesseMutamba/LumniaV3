@@ -1,0 +1,12 @@
+Order ID,Order Date,Region,Product,Net Revenue USD,COGS USD,Quantity,Currency
+A001,2026-01-02,North,Widget,100,60,2,USD
+A001,2026-01-02,North,Widget,100,60,2,USD
+A002,2026-01-17,South,Gadget,200,100,4,USD
+A003,2026-02-02,North,Widget,150,90,3,USD
+A004,2026-02-19,South,Gadget,250,120,5,USD
+A005,2026-03-03,North,Widget,-50,-30,-1,USD
+A006,2026-03-21,South,Widget,350,180,7,USD
+Order ID,Order Date,Region,Product,Net Revenue USD,COGS USD,Quantity,Currency
+Grand total,,,,1000,520,20,USD
+A007,,North,Widget,400,200,8,USD
+A008,2026-03-31,South,Widget,bad amount,20,1,USD

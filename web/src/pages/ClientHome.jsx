@@ -39,6 +39,7 @@ export default function ClientHome({ session, locale, onSignOut }) {
         </div>
       </div>
 
+      <p className="b-prose"><a className="tbtn" href="#/analysis">{L ? 'Analyser vos données' : 'Analyze your data'} →</a></p>
       <div className="b-label">{L ? 'Vos rapports' : 'Your reports'}</div>
 
       {err && (

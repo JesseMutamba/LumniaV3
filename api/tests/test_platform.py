@@ -19,7 +19,7 @@ from app.pipeline.checks import (
 )
 from app.pipeline.ingest import a1, a1_range
 from app.schema import Src, Value
-from conftest import doc  # noqa: E402
+from conftest import AUTH, doc  # noqa: E402
 
 
 # --------------------------------------------------------------- schema ---
@@ -81,7 +81,7 @@ def test_platform_boots_empty(client):
 
 
 def test_unknown_org_404s(client):
-    assert client.get("/v1/orgs/nope/reports").status_code == 404
+    assert client.get("/v1/orgs/nope/reports", headers=AUTH).status_code == 404
 
 
 # ------------------------------------------------------------ authoring ---
@@ -103,7 +103,7 @@ def test_create_org_and_publish(client, auth, org):
     assert r.status_code == 201
     body = r.json()
     assert len(body["share_key"]) == 32
-    assert client.get(f"/v1/orgs/{org}/reports").json()[0]["id"] == "r-pub"
+    assert client.get(f"/v1/orgs/{org}/reports", headers=AUTH).json()[0]["id"] == "r-pub"
 
 
 def test_publish_rejects_unsourced_value(client, auth, org):
@@ -262,14 +262,14 @@ def test_a_client_holding_a_report_cannot_be_deleted(client, auth):
     o = _throwaway_org(client, auth, "del-held")
     client.post(f"/v1/orgs/{o}/reports", json=doc("d-held", org=o), headers=auth)
     assert client.delete(f"/v1/studio/orgs/{o}", headers=auth).status_code == 409
-    assert o in [x["id"] for x in client.get("/v1/orgs").json()]
+    assert o in [x["id"] for x in client.get("/v1/orgs", headers=AUTH).json()]
 
 
 def test_an_empty_client_is_deleted_with_everything_it_held(client, auth):
     o = _throwaway_org(client, auth, "del-empty")
     client.put(f"/v1/studio/orgs/{o}/context", json={"units": {}}, headers=auth)
     assert client.delete(f"/v1/studio/orgs/{o}", headers=auth).status_code == 204
-    assert o not in [x["id"] for x in client.get("/v1/orgs").json()]
+    assert o not in [x["id"] for x in client.get("/v1/orgs", headers=AUTH).json()]
     # the context went with it, so a client re-created under the same id does
     # not silently inherit the old one's definitions
     _throwaway_org(client, auth, o)
@@ -288,7 +288,7 @@ def test_deleting_a_client_requires_the_token(client, auth):
 
 
 def test_public_org_list_never_leaks_keys(client):
-    for o in client.get("/v1/orgs").json():
+    for o in client.get("/v1/orgs", headers=AUTH).json():
         assert "share_key" not in o
 
 
@@ -919,6 +919,9 @@ def asked(client, auth):
 
 
 def _ask(client, auth, **body):
+    if body.get("execute") and not body.get("plan"):
+        preview = client.post("/v1/studio/ask", json={**body, "execute": False}, headers=auth)
+        body["plan"] = preview.json().get("plan")
     return client.post("/v1/studio/ask", json=body, headers=auth)
 
 
@@ -973,8 +976,7 @@ def test_a_narrow_answer_does_not_bury_a_broader_one(client, auth, asked):
     find what the fuller analysis computed — it searches a pool of recent
     runs, not only the last one."""
     narrow = _ask(client, auth, org=asked, mode="analyze",
-                  question="mouvements", plan={"modules": ["movements"],
-                                               "rationale": {"fr": "test"}},
+                  question="mouvements",
                   execute=True).json()
     assert narrow["note"] or narrow["blocks"] is not None  # ran, whatever it found
     a = _ask(client, auth, org=asked, question="exécution OPEX").json()

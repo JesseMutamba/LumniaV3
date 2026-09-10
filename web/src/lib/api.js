@@ -8,9 +8,9 @@
 const BASE = import.meta.env.VITE_API || '/v1'
 const TOKEN_KEY = 'lumnia.token'
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY) || ''
-export const setToken = (t) =>
-  t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY)
+let memoryToken = ''
+export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || memoryToken } catch { return memoryToken } }
+export const setToken = token => { memoryToken = token || ''; try { token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY) } catch {} }
 export const hasToken = () => !!getToken()
 
 async function req(path, { method = 'GET', body, auth = false, raw = false } = {}) {
@@ -41,8 +41,8 @@ async function req(path, { method = 'GET', body, auth = false, raw = false } = {
 
 /* -------------------------------------------------------------- reading */
 export const health = () => req('/health')
-export const listOrgs = () => req('/orgs')
-export const listReports = (orgId) => req(`/orgs/${orgId}/reports`)
+export const listOrgs = () => req('/orgs', {auth:true})
+export const listReports = (orgId) => req(`/studio/orgs/${encodeURIComponent(orgId)}/reports`, {auth:true})
 export const getReport = (id, key) => req(`/reports/${id}?k=${encodeURIComponent(key || '')}`)
 export const getPortal = (orgId, key) =>
   req(`/portal/${orgId}?k=${encodeURIComponent(key || '')}`)
@@ -54,6 +54,13 @@ export const getDashboard = () => req('/studio/dashboard', { auth: true })
 export const getTimeline = (id) => req(`/studio/orgs/${id}/timeline`, { auth: true })
 export const ask = (body) => req('/studio/ask', { method: 'POST', body, auth: true })
 export const getTiles = (id) => req(`/studio/orgs/${id}/tiles`, { auth: true })
+const analysisPath = (org) => `/studio/orgs/${encodeURIComponent(org)}/analytics/dashboards`
+export const listAnalysisDashboards = (org) => req(analysisPath(org), { auth: true })
+export const openAnalysisDashboard = (org, id) => req(`${analysisPath(org)}/${encodeURIComponent(id)}`, { auth: true })
+export const saveAnalysisDashboard = (org, body, id) => req(
+  id ? `${analysisPath(org)}/${encodeURIComponent(id)}` : analysisPath(org),
+  { method: id ? 'PUT' : 'POST', body, auth: true },
+)
 export const addTile = (id, question) =>
   req(`/studio/orgs/${id}/tiles`, { method: 'POST', body: { question }, auth: true })
 export const removeTile = (id, tileId) =>
@@ -105,22 +112,24 @@ export const portalUrl = (org) =>
    A client session is a different principal from the author token: separate
    storage key, separate header, and it must never be sent to /studio. */
 const SESSION_KEY = 'lumnia.session'
+let memorySession = null
 
 export const getSession = () => {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
+    if (!raw) return memorySession && memorySession.expires_at * 1000 > Date.now() ? memorySession : null
     const s = JSON.parse(raw)
     // Expiry is checked here so a stale tab shows the sign-in form rather
     // than a list of reports that all 401 when clicked.
     if (!s?.token || (s.expires_at ?? 0) * 1000 < Date.now()) return null
     return s
   } catch {
-    return null
+    return memorySession && memorySession.expires_at * 1000 > Date.now() ? memorySession : null
   }
 }
 
 export const setSession = (s) => {
+  memorySession = s
   try {
     if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s))
     else localStorage.removeItem(SESSION_KEY)
@@ -128,6 +137,13 @@ export const setSession = (s) => {
     // private browsing: the session lives for this page load only
   }
 }
+
+// The production portal stores the organization on session.org. Older Studio
+// accounts also carry user.org; when present it must agree with that scope.
+export const sessionBelongsToOrg = (session, org) => Boolean(
+  session?.token && session.org?.id === org &&
+  (session.user?.org == null || session.user.org === org)
+)
 
 const sessionHeaders = () => {
   const s = getSession()
@@ -172,3 +188,6 @@ export const setUserDisabled = (username, disabled) =>
   req(`/studio/users/${username}/disable?disabled=${disabled}`, { method: 'POST', auth: true })
 export const deleteUser = (username) =>
   req(`/studio/users/${username}`, { method: 'DELETE', auth: true })
+
+export const saveDraftReport = rep => req(`/orgs/${encodeURIComponent(rep.org)}/reports`, {method:"POST", body:{...rep,status:"draft"},auth:true})
+export const forgetWorkbooks = org => req(`/studio/orgs/${encodeURIComponent(org)}/files`, {method:"DELETE",auth:true})

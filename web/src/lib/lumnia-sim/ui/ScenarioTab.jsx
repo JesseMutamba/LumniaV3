@@ -91,12 +91,11 @@ export default function ScenarioTab({ rows = [], initialCustom, onCustomChange, 
   const T = strings(locale);
   const [custom, setCustom] = useState(initialCustom ?? NEUTRAL);
 
-  const setAndReport = (updater) =>
-    setCustom((prev) => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      if (onCustomChange) onCustomChange(next);
-      return next;
-    });
+  const setAndReport = updater => {
+    const next = typeof updater === 'function' ? updater(custom) : updater;
+    setCustom(next);
+    onCustomChange?.(next);
+  };
 
   const years = useMemo(() => rows.map((r) => r.year), [rows]);
   const scen = useMemo(() => computeAll(rows, custom), [rows, custom]);

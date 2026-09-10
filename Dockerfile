@@ -8,22 +8,27 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web ./
 RUN npm run build -- --base ./
+COPY portal /portal
+RUN node scripts/build-portal.mjs
 
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
-COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY api/requirements.txt api/requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY api/app ./app
 COPY --from=web /web/dist ./static
+COPY --from=web /static-portal ./static-portal
 ENV LUMNIA_STATIC=/app/static
+ENV LUMNIA_PORTAL_STATIC=/app/static-portal
 
-# SQLite lives on a mounted volume so reports survive a redeploy.
+# Local/standalone mode uses SQLite on a mounted volume. Existing Railway
+# production selects the PostgreSQL portal automatically through DATABASE_URL.
 ENV LUMNIA_DB=/data/lumnia.db
 VOLUME /data
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.serve"]

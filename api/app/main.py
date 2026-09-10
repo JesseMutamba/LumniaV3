@@ -11,10 +11,10 @@ from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .bootstrap import bootstrap
-from .routers import accounts, ask, ingest, reports
+from .routers import accounts, analysis_studio, analytics, ask, financial, ingest, reports
 from .schema import BLOCK_TYPES
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 
 @asynccontextmanager
@@ -45,6 +45,9 @@ app.include_router(reports.router, prefix="/v1")
 app.include_router(ingest.router, prefix="/v1")
 app.include_router(ask.router, prefix="/v1")
 app.include_router(accounts.router, prefix="/v1")
+app.include_router(analytics.router, prefix="/v1")
+app.include_router(financial.router, prefix="/v1")
+app.include_router(analysis_studio.router, prefix="/v1")
 
 
 @app.get("/v1/health", tags=["meta"])
@@ -52,6 +55,8 @@ def health():
     return {
         "ok": True,
         "version": VERSION,
+        "revision": os.getenv("LUMNIA_BUILD_SHA") or os.getenv("RAILWAY_GIT_COMMIT_SHA") or None,
+        "features": ["analysis-studio", "combined-financial-upload", "client-financial-reviews"],
         "block_types": list(BLOCK_TYPES),
         "orgs": len(store.list_orgs()),
         "reports": len(store.list_reports()),
@@ -79,3 +84,11 @@ else:
             "health": "/v1/health",
             "docs": "/docs",
         }
+
+
+# The existing Railway portal has a different, already populated PostgreSQL
+# schema. Keep its contracts and authentication, adding the same Studio
+# routers. Never run SQLite bootstrap or seed a replacement database there.
+if os.getenv("DATABASE_URL"):
+    from .portal import create_app
+    app = create_app()

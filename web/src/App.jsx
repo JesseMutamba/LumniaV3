@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import Block, { Sim } from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
+const ClientAnalysisWorkspace=lazy(()=>import('./pages/GeneralWorkspace.jsx').then(m=>({default:m.ClientAnalysisWorkspace})))
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import Landing from './pages/Landing.jsx'
 import ClientHome from './pages/ClientHome.jsx'
 import * as api from './lib/api.js'
 import { t } from './lib/format.js'
-import mark from './assets/lumnia-mark.png'
+import { LumniaLogo } from './components/branding/LumniaBrand'
 
 /**
  * Four surfaces, one build.
@@ -30,10 +31,13 @@ function parseHash() {
   const q = new URLSearchParams(qs || '')
   const m = path.match(/^\/r\/([^/?]+)/)
   if (m) return { view: 'report', id: decodeURIComponent(m[1]), key: q.get('k') }
+  const author = path.match(/^\/a\/([^/?]+)/)
+  if (author) return {view:'authorreport', id:decodeURIComponent(author[1])}
   const mine = path.match(/^\/m\/([^/?]+)/)
   if (mine) return { view: 'myreport', id: decodeURIComponent(mine[1]) }
   const c = path.match(/^\/c\/([^/?]+)/)
   if (c) return { view: 'portal', id: decodeURIComponent(c[1]), key: q.get('k') }
+  if (path === '/analysis' || path === '/financial') return {view:'clientstudio'}
   if (path.startsWith('/studio')) return { view: 'studio' }
   return { view: 'home' }
 }
@@ -58,12 +62,22 @@ export default function App() {
   const [route, setRoute] = useState(parseHash)
   const [locale, setLocale] = useState(firstLocale)
   const [session, setSess] = useState(api.getSession)
+  const [portalMode, setPortalMode] = useState(null)
+  const [deploymentError, setDeploymentError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    api.health().then(value => {
+      if (active) setPortalMode(value.deployment_mode === 'portal')
+    }).catch(() => { if (active) setDeploymentError(true) })
+    return () => { active = false }
+  }, [])
 
   async function signIn(username, password) {
     const s = await api.login(username, password)
     api.setSession(s)
     setSess(s)
-    location.hash = '#/'
+    location.hash = route.view==='clientstudio'||portalMode&&route.view==='studio'?'#/analysis':'#/'
   }
 
   function signOut() {
@@ -96,23 +110,23 @@ export default function App() {
   // The landing page brings its own nav and is written in English only, so
   // the platform bar — and a language toggle with nothing to toggle — would
   // be two headers arguing with each other.
-  const bare = route.view === 'home' && !session
+  const clientStudio = route.view === 'clientstudio' || route.view === 'studio' && portalMode === true
+  const bare = (route.view === 'home' || clientStudio) && !session
   // A cream document under a dark green bar is two designs meeting at a
   // hard edge. Reader surfaces get a header in their own key.
-  const reading = ['report', 'myreport', 'portal'].includes(route.view) || !!session
+  const reading = ['report', 'myreport', 'authorreport', 'portal'].includes(route.view) || !!session
 
   return (
     <div className="shell">
       {!bare && (
         <div className={`top${reading ? ' inst' : ''}`}>
           <a className="brand" href="#/">
-            <img src={mark} alt="" />
-            <span>Lumnia</span>
+            <LumniaLogo variant={reading ? 'paper' : 'void'} />
           </a>
           <div className="grow" />
           {route.view !== 'report' && route.view !== 'portal' && !session && (
-            <a className="tbtn" href={route.view === 'studio' ? '#/' : '#/studio'}>
-              {route.view === 'studio' ? (locale === 'fr' ? 'accueil' : 'home') : 'studio'}
+            <a className="tbtn" href={route.view === 'studio' ? '#/' : portalMode ? '#/analysis' : '#/studio'}>
+              {route.view === 'studio' ? (locale === 'fr' ? 'accueil' : 'home') : portalMode ? (locale === 'fr' ? 'analyse' : 'analysis') : 'studio'}
             </a>
           )}
           <div className="lang" role="group" aria-label="Locale">
@@ -126,15 +140,19 @@ export default function App() {
       )}
 
       {route.view === 'report' && (
-        <Viewer id={route.id} shareKey={route.key} locale={locale} />
+        <Viewer key={`public:${route.id}:${route.key}`} id={route.id} shareKey={route.key} locale={locale} />
       )}
+      {route.view === 'authorreport' && portalMode === false && <Viewer key={'author:' + route.id} id={route.id} author locale={locale} />}
+      {route.view === 'authorreport' && portalMode === true && <div className="doc inst"><p>Open published reports from your client workspace or their shared link.</p><a href="#/">Open client workspace →</a></div>}
       {route.view === 'myreport' && (
-        <Viewer id={route.id} mine locale={locale} onExpired={signOut} />
+        <Viewer key={`mine:${route.id}`} id={route.id} mine locale={locale} onExpired={signOut} />
       )}
       {route.view === 'portal' && (
-        <PortalPage id={route.id} shareKey={route.key} locale={locale} />
+        <PortalPage key={`portal:${route.id}:${route.key}`} id={route.id} shareKey={route.key} locale={locale} />
       )}
-      {route.view === 'studio' && <Studio locale={locale} />}
+      {['studio','authorreport'].includes(route.view) && portalMode === null && <div className="doc inst"><p role={deploymentError ? 'alert' : 'status'}>{deploymentError ? 'The workspace could not be opened. Please reload to try again.' : 'Opening workspace…'}</p></div>}
+      {route.view === 'studio' && portalMode === false && <Studio locale={locale} />}
+      {clientStudio && (session ? <Suspense fallback={<p>Opening analysis…</p>}><ClientAnalysisWorkspace key={session.user.username+':'+session.token} session={session} onExpired={signOut}/></Suspense> : <Landing onSignIn={signIn}/>)}
       {route.view === 'home' &&
         (session ? (
           <ClientHome session={session} locale={locale} onSignOut={signOut} />
@@ -154,7 +172,9 @@ function PortalPage({ id, shareKey, locale }) {
   useEffect(() => {
     setPortal(null)
     setErr(null)
-    api.getPortal(id, shareKey).then(setPortal).catch(setErr)
+    let cancelled = false
+    api.getPortal(id, shareKey).then(v => { if (!cancelled) setPortal(v) }).catch(e => { if (!cancelled) setErr(e) })
+    return () => { cancelled = true }
   }, [id, shareKey])
 
   const L = locale === 'fr'
@@ -218,7 +238,7 @@ function PortalPage({ id, shareKey, locale }) {
 
 /* ---------------------------------------------------------------- viewer */
 
-function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
+function Viewer({ id, shareKey, mine = false, author = false, locale, onExpired }) {
   const [rep, setRep] = useState(null)
   const [err, setErr] = useState(null)
   const [lens, setLens] = useState('doc')
@@ -229,12 +249,15 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
     setLens('doc')
     // Same document either way. What differs is who is asking: a key in the
     // link, or the session of a client who signed in.
-    const load = mine ? api.getMyReport(id) : api.getReport(id, shareKey)
-    load.then(setRep).catch((e) => {
+    const load = author ? api.getReportAsAuthor(id) : mine ? api.getMyReport(id) : api.getReport(id, shareKey)
+    let cancelled = false
+    load.then(v => { if (!cancelled) setRep(v) }).catch((e) => {
+      if (cancelled) return
       if (mine && e.status === 401) onExpired?.()
       else setErr(e)
     })
-  }, [id, shareKey, mine])
+    return () => { cancelled = true }
+  }, [id, shareKey, mine, author])
 
   // Tabs, bookmarks and shared links deserve the report's name, not ours.
   useEffect(() => {
@@ -259,7 +282,7 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
     for (const b of rep.blocks) {
       const isSection = b.type === 'heading' && (b.level ?? 2) <= 2
       if (b.type === 'ledger') {
-        out.push({ key: 'src', label: L ? 'Sources' : 'Sources', blocks: [b] })
+        out.push({ key: `src${out.length}`, label: L ? 'Sources' : 'Sources', blocks: [b] })
         continue
       }
       if (b.type === 'projection') {
@@ -354,12 +377,12 @@ function Viewer({ id, shareKey, mine = false, locale, onExpired }) {
         ))}
       </div>
 
-      {lens === 'dash' ? (
+      {!active ? <p role="status">{L ? 'Ce rapport ne contient pas encore de contenu affichable.' : 'This report has no displayable content yet.'}</p> : active.key === 'dash' ? (
         <Dashboard rep={rep} locale={locale} />
       ) : active.sim ? (
         // The simulation tabs bring their own layout, so they take the page
         // the way the dashboard does rather than entering the panel grid.
-        <Sim b={active.sim.b} mode={active.sim.mode} locale={locale} sources={rep.sources} />
+        <Sim key={`${rep.id}:${rep.blocks.indexOf(active.sim.b)}`} reportKey={`${rep.org}:${rep.id}:${rep.generated_at || ""}`} b={active.sim.b} mode={active.sim.mode} locale={locale} sources={rep.sources} />
       ) : (
         // Wrapped so the institutional theme can lay panels out side by side.
         // A chart given the full width of the page is a chart nobody can read

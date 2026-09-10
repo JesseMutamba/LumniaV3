@@ -48,7 +48,7 @@ author = Depends(require_author)
 # orgs
 # --------------------------------------------------------------------------
 
-@router.get("/orgs", response_model=list[Org], tags=["orgs"])
+@router.get("/orgs", response_model=list[Org], tags=["orgs"], dependencies=[author])
 def get_orgs():
     return store.list_orgs()
 
@@ -68,11 +68,19 @@ def create_org(body: OrgIn):
     return store.get_org(body.id)
 
 
-@router.get("/orgs/{org_id}/reports", response_model=list[ReportStub], tags=["orgs"])
+@router.get("/orgs/{org_id}/reports", response_model=list[ReportStub], tags=["orgs"], dependencies=[author])
+@router.get("/studio/orgs/{org_id}/reports", response_model=list[ReportStub], tags=["studio"], dependencies=[author])
 def get_org_reports(org_id: str):
     if not store.get_org(org_id):
         raise HTTPException(404, f"Unknown org: {org_id}")
     return store.list_reports(org_id)
+
+
+@router.delete("/studio/orgs/{org_id}/files", tags=["studio"], dependencies=[author])
+def forget_workbooks(org_id: str):
+    if not store.get_org(org_id):
+        raise HTTPException(404, "Unknown client.")
+    return {"deleted_versions": store.forget_files(org_id)}
 
 
 # --------------------------------------------------------------------------
@@ -146,7 +154,7 @@ def get_report(
     username = read_session(authorization.removeprefix("Bearer ").strip())
     user = store.get_user(username) if username else None
     by_session = bool(user and not user.disabled and user.org == rep.org)
-    ok = rep.status != "retracted" and (by_key or by_session)
+    ok = rep.status == "published" and (by_key or by_session)
     store.log_read("report", report_id, ok, fingerprint(request))
     if rep.status == "retracted":
         raise HTTPException(410, "This report has been retracted.")
@@ -191,9 +199,14 @@ def _publish(org_id: str, rep: Report) -> Report:
         )
 
     existing = store.get_report(rep.id)
+    if existing and existing.org != org_id:
+        raise HTTPException(409, "This report ID belongs to another client. Choose a different ID.")
     rep.share_key = (existing.share_key if existing else None) or new_share_key()
     rep.generated_at = rep.generated_at or datetime.now(timezone.utc)
-    return store.put_report(rep)
+    try:
+        return store.put_report(rep)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.post(
@@ -225,12 +238,12 @@ async def import_report(file: UploadFile = File(...)):
     raw = await file.read()
     try:
         payload = json.loads(raw)
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         raise HTTPException(400, f"Not valid JSON: {e}")
     try:
-        rep = Report(**payload)
+        rep = Report.model_validate(payload)
     except ValidationError as e:
-        raise HTTPException(422, {"error": "Schema validation failed", "errors": e.errors()})
+        raise HTTPException(422, {"error": "Schema validation failed", "errors": json.loads(e.json(include_context=False))})
     return _publish(rep.org, rep)
 
 
@@ -247,6 +260,8 @@ def set_status(report_id: str, new_status: str):
     if new_status not in ("draft", "published", "retracted"):
         raise HTTPException(400, f"Bad status: {new_status}")
     rep.status = new_status  # type: ignore[assignment]
+    if new_status == "published":
+        return _publish(rep.org, rep)
     return store.put_report(rep)
 
 

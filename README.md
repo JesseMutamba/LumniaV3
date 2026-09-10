@@ -9,6 +9,48 @@ opens it on a phone with no account.
 
 The platform ships empty. It holds only what you publish.
 
+## Interactive analytics workspace
+
+Studio now has two workspaces: **Reports & operations** retains the existing
+authoring, analysis modules, clients, and publication controls; **Explore data**
+adds preparation and conversational dashboards within the same Lumnia app.
+
+1. Open Studio, choose Explore data, and select a client.
+2. Upload an Excel (`.xlsx`, `.xlsm`), CSV, or TSV file. Select a detected table,
+   review cleaning changes and issues, and confirm its columns or financial measure.
+3. Ask **Show monthly revenue**, then **Add revenue by region**. Each question
+   updates the same dashboard. Financial workbooks offer their own measures,
+   period trends, category breakdowns, and calculated insights.
+4. Name and save the dashboard. Open it from **Saved dashboards**, or return to
+   its author-only Studio URL. The prepared data, original cell references,
+   mappings, selected measure, charts, and conversation reopen together.
+
+The preparation pipeline handles introductory rows, formatting-only rows,
+repeated/blank headers, localized numbers, cached formulas, annual/monthly
+matrices, and cash journals. It preserves source addresses and a SHA-256 file
+fingerprint. Currencies are kept separate; balances and rates remain
+non-additive. Exact duplicates remain unless the author selects their removal.
+Ambiguous dates, source-year conflicts, formula errors, and unsupported layouts
+remain visible for review. Original files are never modified.
+
+Dashboards are private analysis documents, separate from published reports.
+The existing author token, client scope, SQLite volume, and retention settings
+apply. `retain_files: false` disables saving prepared data too. Ignored sheets
+are omitted before Excel preparation. Concurrent saves use version checks so
+an older session cannot silently overwrite a newer one.
+
+The conversational dashboard currently uses bounded, deterministic commands;
+it is not unrestricted AI analysis. Existing Direct/Analyse questions and the
+optional model planner remain available in Reports & operations. Uploads are
+limited to 8 MB, 20,000 observations per selected table, and 150 populated
+columns. Formula caches are read rather than recalculated. Tables are analyzed
+individually; the workspace does not guess sheet joins, currency conversions,
+forecasts, or monthly detail from annual source figures. Preparation notes and
+calculated financial insight text currently use English; principal controls
+support English and French.
+
+Implementation and rollout notes: [docs/analytics-workspace.md](docs/analytics-workspace.md).
+
 ## Three surfaces
 
 | | Who | Where | Needs |

@@ -49,6 +49,7 @@ a:hover{color:var(--gold-hover)}
   padding:17px 40px}
 .brand{display:flex;align-items:center;gap:11px;text-decoration:none}
 .brand img{width:34px;height:34px;object-fit:contain}
+.top .brand .lumnia-logo{width:166px;height:auto;display:block}
 .brand span{font-family:var(--serif);font-weight:400;font-size:19px;line-height:1;
   letter-spacing:.22em;text-indent:.22em;color:var(--bright);text-transform:uppercase}
 .grow{flex:1}
