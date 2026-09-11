@@ -25,10 +25,10 @@ COPY --from=web /static-portal ./static-portal
 ENV LUMNIA_STATIC=/app/static
 ENV LUMNIA_PORTAL_STATIC=/app/static-portal
 
-# Local/standalone mode uses SQLite on a mounted volume. Existing Railway
-# production selects the PostgreSQL portal automatically through DATABASE_URL.
+# Standalone SQLite deployments mount /data through their host configuration.
+# Railway production uses its existing PostgreSQL service via DATABASE_URL;
+# Railway does not support Dockerfile VOLUME instructions.
 ENV LUMNIA_DB=/data/lumnia.db
-VOLUME /data
 
 EXPOSE 8000
 CMD ["python", "-m", "app.serve"]
