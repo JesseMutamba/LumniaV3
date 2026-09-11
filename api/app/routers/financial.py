@@ -324,10 +324,17 @@ async def read_document(request: Request, org: str) -> FinancialDocument:
         document = FinancialDocument.model_validate_json(body)
     except ValidationError as exc:
         raise HTTPException(422, json.loads(exc.json(include_input=False, include_url=False))) from exc
+    validate_document_context(document, context)
+    return document
+
+
+def validate_document_context(document: FinancialDocument, context) -> None:
+    """Apply the current client's storage rules to saved and published data."""
+    if context and not context.retain_files:
+        raise HTTPException(409, "Saving prepared financial data is disabled by this client's retention setting")
     ignored = {name.strip().casefold() for name in (context.ignore_sheets if context else [])}
     if any(ref.sheet.strip().casefold() in ignored for ref in document.review.references()):
         raise HTTPException(409, "This review includes a sheet excluded by the client's context")
-    return document
 
 
 def document_data(document: FinancialDocument) -> dict:

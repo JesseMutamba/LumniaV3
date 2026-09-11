@@ -853,3 +853,40 @@ svg.clickable{cursor:pointer}
 /* A legend swatch is a fixed 8px mark; as a flex item it was stretching to
    fill the line box and reading as a filled block. */
 .card-h .key .sw{flex:none;width:8px;height:8px;border-radius:1px}
+
+/* The legacy report viewer uses light ink on a dark background. The Studio
+   and its portalled dialogs are paper surfaces, so inherited legacy rules
+   (especially tbody td and placeholders) must resolve to paper-safe ink. */
+:where(.financial-review,.gs-root,.fr-modal-content,.gs-modal){
+  --ground:#f4f0e8; --ground-deep:#eee3ca;
+  --ink:#201d17; --bright:#201d17;
+  --gold:#79601f; --gold-hover:#5c4715; --gold-dim:#79601f;
+  --well:#f4f0e8; --panel:#fbf8f2;
+  --line:#ded5c6; --line-soft:#e8dfce; --line-strong:#c2b49a; --line-input:#b5a68b;
+  --mut-28:#6b604d; --mut-3:#6b604d; --mut-34:#6b604d;
+  --mut-4:#6b604d; --mut-42:#6b604d; --mut-5:#6b604d;
+  --mut-6:#6b604d; --mut-66:#6b604d; --mut-7:#514735;
+  --mut-72:#514735; --mut-78:#514735; --mut-82:#514735;
+  font-weight:400;
+}
+:is(.financial-review,.gs-root,.fr-modal-content,.gs-modal) :is(input,textarea)::placeholder{
+  color:#6b604d; opacity:1;
+}
+:is(.financial-review,.gs-root,.fr-modal-content,.gs-modal) :is(input,textarea,select)[readonly]{
+  color:#201d17; opacity:1;
+}
+:is(.financial-review,.gs-root,.fr-modal-content,.gs-modal) :is(input,textarea,select):disabled{
+  color:#6b604d; background:#eee7da; opacity:1; -webkit-text-fill-color:#6b604d;
+}
+:is(.financial-review,.gs-root,.fr-modal-content,.gs-modal) [data-slot=button]:disabled{
+  color:#6b604d; background:#e9e1d3; border-color:#c2b49a; opacity:1; cursor:not-allowed;
+}
+:is(.financial-review,.gs-root) .recharts-cartesian-axis-tick-value{
+  fill:#514735; font-size:14px; font-weight:400;
+}
+/* Recharts supplies series colours as inline styles. Keep the swatches in
+   those colours, but use readable ink for the actual legend and tooltip text. */
+:is(.financial-review,.gs-root) :is(.recharts-legend-item-text,.recharts-tooltip-item){
+  color:#514735!important; font-size:14px; font-weight:400;
+}
+:is(.financial-review,.gs-root) .recharts-tooltip-label{color:#201d17;font-size:14px}

@@ -6,7 +6,7 @@
       window.location.replace('/workspace/#/analysis')
       return
     }
-    if (/^#\/(?:analysis|studio|financial|reports)(?:[/?]|$)/.test(hash)) {
+    if (/^#\/(?:analysis|studio|financial|reports|published)(?:[/?]|$)/.test(hash)) {
       window.location.replace('/workspace/' + hash)
       return
     }

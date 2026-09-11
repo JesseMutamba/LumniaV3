@@ -55,12 +55,12 @@ function exercise(startHash) {
   vm.runInNewContext(bridge, { window, document })
   return { redirects, entry, window, listeners }
 }
-await test('Only the new analysis paths redirect, retaining their full hash', () => {
-  for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports']) {
+await test('Only workspace and published-review paths redirect, retaining their full hash', () => {
+  for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
     assert.deepEqual(exercise(route).redirects, ['/workspace/' + route])
   }
   assert.deepEqual(exercise('#signin').redirects, ['/workspace/#/analysis'])
-  for (const route of ['', '#/', '#contact', '#/studio-other', '#/analysis-other']) {
+  for (const route of ['', '#/', '#contact', '#/studio-other', '#/analysis-other', '#/published-other']) {
     const result = exercise(route)
     assert.deepEqual(result.redirects, [])
     assert.equal(result.entry.hidden, false)

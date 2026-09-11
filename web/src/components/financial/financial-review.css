@@ -57,3 +57,77 @@
 .fr-selected-files{list-style:none;margin:12px 0;padding:0}.fr-selected-files li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e8dfce;color:#665b47}.fr-selected-files li>svg{flex-shrink:0}.fr-selected-files li>span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:13px}.fr-selected-files small{display:block;font-size:11px;color:#796f5c}.fr-selected-files button{border:0;background:transparent;color:#79601f;font-size:12px;cursor:pointer;padding:7px}.fr-selected-files button:disabled{opacity:.5;cursor:not-allowed}
 .financial-review .fr-sidebar{overflow-y:auto}.financial-review .fr-sidebar>*{flex-shrink:0}
 @media(max-width:390px){.financial-review .fr-topbar>div{flex-wrap:wrap}.financial-review .fr-save-status{flex-basis:100%;font-size:12px}.financial-review .fr-topbar [data-slot=button]{flex:1}.fr-mobile-nav{column-gap:10px}}
+
+/* Readability on paper: source mappings, amounts and assumptions carry the
+   same ink regardless of the legacy report stylesheet's table selectors. */
+.financial-review{--fr-muted:#6b604d;font-weight:400}
+.financial-review table{font-family:inherit;font-size:14px;line-height:1.6;color:#201d17}
+.financial-review tbody :is(td,th){color:#201d17;font-weight:400}
+.financial-review tbody th{font-weight:600}
+.financial-review thead th{color:#514735;font-size:14px;line-height:1.5;font-weight:600}
+.financial-review .fr-highlight-row :is(td,th){color:#604b1b;font-weight:600}
+.financial-review tbody td button:disabled{color:inherit;opacity:1}
+.financial-review :is(.fr-title-row p,.fr-insights p,.fr-definitions p,.fr-steps p,.fr-issue-list p,.fr-section-heading p){font-size:16px;line-height:1.65;color:#6b604d}
+.financial-review :is(.fr-metric-label,.fr-metric p,.fr-panel-heading p,.fr-review-strip,.fr-save-status,.fr-control>span,.fr-control small,.fr-text-link,.fr-suggestions button,.fr-source-stats,.fr-hash,.fr-review-badge,.fr-count,.fr-footer){font-size:14px;line-height:1.5}
+.financial-review :is(.fr-metric-label,.fr-metric p,.fr-panel-heading p,.fr-review-strip,.fr-save-status,.fr-control>span,.fr-control small,.fr-source-stats,.fr-hash,.fr-footer){color:#6b604d}
+.financial-review .fr-metric-accent :is(.fr-metric-label,p){color:#604b1b}
+.financial-review .fr-footnote{font-size:14px;line-height:1.65;color:#6b604d!important}
+.financial-review .fr-ask small{color:#6b604d;font-size:14px;line-height:1.6;display:block}
+.financial-review .fr-ask form input{font-size:16px;color:#201d17;height:44px}
+.financial-review .fr-suggestions button{color:#79601f;min-height:36px;text-align:left}
+.financial-review .fr-callout{color:#79601f}
+.financial-review .fr-callout :is(p,strong){color:#6b5626;font-size:16px}
+.financial-review .fr-callout button{color:#79601f;font-size:14px;min-height:36px}
+.financial-review .fr-review-strip>button{color:#79601f;font-size:14px}
+.financial-review .fr-review-badge{color:#6b5626}
+.financial-review :is(.fr-insights article>span,.fr-steps li>span){color:#79601f;font-size:14px}
+.financial-review .fr-cost-hero :is(p,.fr-eyebrow){color:#c1b49d}
+.financial-review .fr-cost-hero>div:last-child>span{font-size:14px}
+.financial-review .fr-topbar>span{color:#6b604d}
+.financial-review :is(.fr-nav-caption,.fr-workspace small,.fr-sidebar-bottom p,.fr-sidebar-bottom small){font-size:14px;line-height:1.6}
+.financial-review .fr-sidebar-bottom{padding-top:18px}
+.fr-modal-content{font-size:16px;font-weight:400;line-height:1.6}
+.fr-modal-content :is(.fr-upload-field small,.fr-upload-field em,.fr-prepared p,.fr-prepared details,.fr-saved-list small,.fr-source-list p,.fr-source-list small,.fr-source-list code,.fr-selected-files small,.fr-selected-files li>span,.fr-selected-files button){font-size:14px;color:#6b604d;line-height:1.6}
+.fr-modal-content :is(.fr-field,.fr-upload-field strong,.fr-upload-field input){font-size:16px}
+.fr-modal-content .fr-footnote{font-size:14px;color:#6b604d!important}
+.fr-modal-content :is([data-slot=dialog-description],.fr-modal-close){color:#6b604d}
+.fr-modal-content :is([data-slot=input],[data-slot=native-select]){font-size:16px}
+@media(max-width:700px){
+  .financial-review :is(.fr-save-status,.fr-mobile-nav,.fr-topbar [data-slot=button]){font-size:14px}
+  .financial-review .fr-topbar>div{flex-wrap:wrap}
+  .financial-review .fr-metric strong{font-size:clamp(23px,5.6vw,30px);white-space:normal;overflow-wrap:anywhere}
+  .financial-review .fr-topbar [data-slot=button]{min-height:42px}
+  .financial-review :is(.fr-title-row p,.fr-insights p,.fr-steps p){font-size:16px}
+}
+
+/* Publish is a first-class workspace action, including on narrow screens. */
+.financial-review .fr-topbar{flex-wrap:wrap}
+.financial-review .fr-topbar>span{min-width:0;flex:1 1 220px}
+.financial-review .fr-topbar>div{max-width:100%;margin-left:auto;flex-wrap:wrap}
+.financial-review .fr-publish-action[data-slot=button]{background:#79601f;color:#fff;border-color:#79601f;white-space:normal}
+.financial-review .fr-publish-action[data-slot=button]:hover{background:#5c4715;border-color:#5c4715}
+.financial-review .fr-publish-action[data-slot=button]:disabled{background:#e9e1d3;color:#6b604d;border-color:#c2b49a}
+.financial-review .fr-publication-banner{margin:26px 0 22px;background:#eee3ca;border-color:#d7bf84;color:#79601f;align-items:flex-start}
+.financial-review .fr-publication-banner>div{flex:1;min-width:0}
+.financial-review .fr-publication-banner strong{color:#604b1b}
+.financial-review .fr-publication-banner p{color:#6b5626;max-width:90ch;line-height:1.65}
+.financial-review .fr-publication-banner .fr-text-link{margin:12px 0 0;padding:5px 0;white-space:normal;justify-content:flex-start;text-align:left;line-height:1.5;color:#604b1b}
+.financial-review .fr-publication-link{display:flex;justify-content:flex-end;margin:16px 0}
+.financial-review .fr-publication-link .fr-text-link{min-height:36px;line-height:1.5;text-align:left}
+.fr-modal-content .fr-publication-summary{padding:18px;border:1px solid #ded5c6;border-radius:8px;background:#f4f0e8;margin-bottom:20px}
+.fr-modal-content .fr-publication-summary h3{font-size:18px;line-height:1.4;color:#201d17;font-weight:600;overflow-wrap:anywhere}
+.fr-modal-content .fr-publication-summary p{font-size:16px;line-height:1.65;color:#6b604d;margin:12px 0 0}
+.financial-review .fr-title-row>div{min-width:0}
+.financial-review .fr-title-row h1{overflow-wrap:anywhere}
+@media(max-width:700px){
+  .financial-review .fr-topbar>span{display:none}
+  .financial-review .fr-publication-banner{gap:10px;padding:17px 15px}
+  .financial-review .fr-publication-link{justify-content:flex-start}
+}
+@media(max-width:520px){
+  .financial-review .fr-topbar>div:has(.fr-publish-action) .fr-save-status{flex-basis:100%;margin-right:0}
+  .financial-review .fr-topbar>div:has(.fr-publish-action) [data-slot=button]{flex:1 1 auto}
+  .financial-review .fr-topbar .fr-publish-action[data-slot=button]{flex-basis:100%;width:100%;min-height:44px}
+  .financial-review .fr-topbar [data-slot=button]{white-space:normal}
+  .fr-modal-content .fr-publication-summary{padding:15px}
+}

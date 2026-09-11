@@ -44,3 +44,46 @@
 .gs-space>div{min-width:0}.gs-space strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}.gs-topbar>span{min-width:0}.gs-topbar>span>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}.gs-root .gs-mobile-account,.gs-root .gs-mobile-saved{display:none}.gs-root .gs-upload-progress{border:1px solid #d9cfbc;background:#fbf8f2;border-radius:9px;padding:16px 18px;margin-bottom:14px}.gs-upload-progress>div{display:flex;gap:22px;flex-wrap:wrap}.gs-upload-progress span{display:flex;align-items:center;gap:8px;font-size:12px;color:#958a76}.gs-upload-progress span b{display:grid;place-items:center;width:22px;height:22px;border:1px solid #d9cfbc;border-radius:50%;font-size:10px;font-weight:500}.gs-upload-progress .active{color:#675126;font-weight:600}.gs-upload-progress .active b{background:#a8821f;color:#fff;border-color:#a8821f}.gs-upload-progress .done{color:#79601f}.gs-upload-progress p{font-size:12px;color:#796f5c;margin:11px 0 0;overflow-wrap:anywhere}.gs-leave-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:24px}.gs-root .gs-notice.error>span{flex:1;min-width:0}.gs-root .gs-notice.error [data-slot=button]{flex:none}
 @media(max-width:800px){.gs-root .gs-mobile-account{display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:#66583d;font-size:12px;min-height:36px;padding:5px;white-space:nowrap}.gs-root .gs-mobile-saved{display:inline-flex}.gs-root .gs-topbar{flex-wrap:wrap;height:auto;min-height:68px;padding-top:12px;padding-bottom:12px;gap:10px}.gs-root .gs-topbar>div{gap:6px;margin-left:auto}.gs-root .gs-topbar>span{font-size:11px}.gs-upload-progress>div{gap:12px}.gs-upload-progress span{font-size:11px}}
 @media(max-width:480px){.gs-root .gs-topbar>span{width:100%}.gs-root .gs-topbar>div{width:100%;justify-content:flex-end}.gs-root .gs-topbar .gs-mobile-account:first-child{margin-right:auto}.gs-leave-actions [data-slot=button]{flex:1 1 auto}}
+
+/* Match the financial review's legibility through preparation, analysis,
+   conversation and dialogs; metadata remains readable at normal zoom. */
+.gs-root{--gs-muted:#6b604d;font-weight:400}
+.gs-root table,.gs-modal table{font-family:inherit;font-size:14px;line-height:1.6;color:#201d17}
+.gs-root tbody td,.gs-modal tbody td{color:#201d17;font-weight:400;text-align:left}
+.gs-root th,.gs-modal th{font-size:14px;color:#514735;line-height:1.5;font-weight:600;text-align:left}
+.gs-root td small,.gs-root th small{font-size:14px;color:#6b604d}
+.gs-root .gs-field-table td:first-child strong{font-size:14px;color:#201d17}
+.gs-root .gs-field-table td:first-child input{font-size:14px;height:34px;color:#514735}
+.gs-root .gs-field-table :is([data-slot=input],[data-slot=native-select]){font-size:14px}
+.gs-root :is(.gs-start p,.gs-prep-head p,.gs-heading p,.gs-examples p,.gs-section-heading p,.gs-insights p,.gs-chat-message p){font-size:16px;line-height:1.65}
+.gs-root :is(.gs-type,.gs-table-choice,.gs-table-choice>span,.gs-prep-stats small,.gs-checks label,.gs-entity,.gs-entity p,.gs-good,.gs-log,.gs-issue strong,.gs-issue p,.gs-result-heading,.gs-result h3,.gs-facts small,.gs-facts span,.gs-card-footer,.gs-filter-tags span,.gs-blocked,.gs-chat-title small,.gs-chat-message small,.gs-thinking,.gs-source-hash,.gs-footer,.gs-upload-progress span,.gs-upload-progress p){font-size:14px;line-height:1.6}
+.gs-root :is(.gs-type,.gs-table-choice>span,.gs-prep-stats small,.gs-entity p,.gs-log>p,.gs-result-heading,.gs-facts small,.gs-facts span,.gs-card-footer,.gs-filter-tags span,.gs-blocked,.gs-thinking,.gs-source-hash,.gs-footer,.gs-upload-progress span,.gs-upload-progress p){color:#6b604d}
+.gs-root .gs-source-hash{font-size:14px!important}
+.gs-root .gs-result-heading button{color:#6b604d;padding:5px}
+.gs-root .gs-card-footer button{font-size:14px!important;color:#79601f;min-height:32px;white-space:normal;text-align:left}
+.gs-root .gs-suggestions button{font-size:14px!important;line-height:1.5;min-height:38px}
+.gs-root .gs-chat textarea{font-size:16px!important;line-height:1.5}
+.gs-root .gs-chat form:focus-within{border-color:#79601f;outline:2px solid #79601f;outline-offset:2px}
+.gs-root .gs-chat textarea:focus-visible{outline:2px solid #79601f;outline-offset:2px;border-radius:2px}
+.gs-root .gs-chat-bottom>small{font-size:14px;color:#6b604d;line-height:1.6}
+.gs-root .gs-chat-message.user small{color:#6b604d}
+.gs-root .gs-issue{color:#6b604d}
+.gs-root .gs-issue.review,.gs-root .gs-issue.warning{color:#6b5626}
+.gs-root .amber{color:#79601f!important}
+.gs-root .gs-insights :is(p,small){color:#604b1b}
+.gs-root :is(.gs-eyebrow,.gs-examples small,.gs-drop small,.gs-tabs [data-slot=tabs-trigger] b){font-size:14px}
+.gs-root :is(.gs-space small,.gs-nav-label,.gs-connection,.gs-brand-descriptor){font-size:14px;line-height:1.6}
+.gs-root .gs-topbar>span{font-size:14px;color:#6b604d}
+.gs-root .gs-upload-progress .active{color:#604b1b}
+.gs-root .gs-upload-progress .active b{background:#79601f;border-color:#79601f;color:#fff}
+.gs-root .gs-upload-progress .done{color:#79601f}
+.gs-modal{font-size:16px;font-weight:400}
+.gs-modal :is(small,.gs-small,[data-slot=dialog-description],.gs-setting-status strong,.gs-setting-status p,.gs-saved-list details,.gs-source-list>div,.gs-source-list strong){font-size:14px;line-height:1.6;color:#6b604d}
+.gs-modal :is([data-slot=input],[data-slot=native-select],.gs-settings-form label){font-size:16px}
+.gs-modal .gs-saved-list strong{color:#201d17;font-size:16px}
+.gs-modal .gs-source-list strong{color:#79601f}
+@media(max-width:800px){
+  .gs-root :is(.gs-topbar>span,.gs-mobile-account,.gs-workflow,.gs-upload-progress span,.gs-topbar [data-slot=button]){font-size:14px}
+  .gs-root .gs-topbar [data-slot=button]{min-height:40px;height:auto}
+  .gs-root .gs-topbar>div{flex-wrap:wrap}
+}

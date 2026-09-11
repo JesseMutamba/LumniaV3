@@ -42,6 +42,7 @@ jobs:
         working-directory: web
         run: |
           node scripts/test-workspace-navigation.mjs
+          node scripts/test-workspace-routes.mjs
           node scripts/test-portal-client.mjs
           node scripts/test-studio-core.mjs
           node scripts/test-studio-intake.mjs

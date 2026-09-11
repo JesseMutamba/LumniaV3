@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import Block, { Sim } from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
 const ClientAnalysisWorkspace=lazy(()=>import('./pages/GeneralWorkspace.jsx').then(m=>({default:m.ClientAnalysisWorkspace})))
+const PublishedReview=lazy(()=>import('./pages/PublishedReview.jsx'))
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import Landing from './pages/Landing.jsx'
 import ClientHome from './pages/ClientHome.jsx'
@@ -10,6 +11,7 @@ import * as api from './lib/api.js'
 import { t } from './lib/format.js'
 import { LumniaLogo } from './components/branding/LumniaBrand'
 import { subscribeWorkspaceNavigation } from './lib/workspace-navigation.js'
+import { parseWorkspaceRoute } from './lib/workspace-routes.js'
 
 /**
  * Four surfaces, one build.
@@ -28,22 +30,7 @@ import { subscribeWorkspaceNavigation } from './lib/workspace-navigation.js'
  * sensitive ships in the bundle because the bundle holds nothing worth having.
  */
 function parseHash() {
-  const raw = location.hash.replace(/^#/, '') || '/'
-  const [path, qs] = raw.split('?')
-  const q = new URLSearchParams(qs || '')
-  const m = path.match(/^\/r\/([^/?]+)/)
-  if (m) return { view: 'report', id: decodeURIComponent(m[1]), key: q.get('k') }
-  const author = path.match(/^\/a\/([^/?]+)/)
-  if (author) return {view:'authorreport', id:decodeURIComponent(author[1])}
-  const mine = path.match(/^\/m\/([^/?]+)/)
-  if (mine) return { view: 'myreport', id: decodeURIComponent(mine[1]) }
-  const c = path.match(/^\/c\/([^/?]+)/)
-  if (c) return { view: 'portal', id: decodeURIComponent(c[1]), key: q.get('k') }
-  if (path === '/analysis' || path === '/financial') return {view:'clientstudio'}
-  if (path === '/reports') return {view:'clientreports'}
-  if (path.startsWith('/studio')) return { view: 'studio' }
-  if (/^\/workspace(?:\/|$)/.test(location.pathname)) return {view:'clientstudio'}
-  return { view: 'home' }
+  return parseWorkspaceRoute(location)
 }
 
 /**
@@ -83,7 +70,7 @@ export default function App() {
     api.setSession(s)
     setSess(s)
     setSessionExpired(false)
-    location.hash = route.view === 'clientreports' ? '#/reports' : route.view==='clientstudio'||portalMode&&route.view==='studio'?'#/analysis':'#/'
+    location.hash = route.view === 'publication' ? '#/published/'+encodeURIComponent(route.id) : route.view === 'clientreports' ? '#/reports' : route.view==='clientstudio'||portalMode&&route.view==='studio'?'#/analysis':'#/'
   }
 
   function signOut(expired = false) {
@@ -129,7 +116,7 @@ export default function App() {
   // be two headers arguing with each other.
   const clientStudio = route.view === 'clientstudio' || route.view === 'studio' && portalMode === true
   const clientReports = route.view === 'clientreports' || route.view === 'home' && !!session
-  const bare = clientStudio || clientReports || route.view === 'home' && !session
+  const bare = clientStudio || clientReports || route.view === 'publication' || route.view === 'invalid' || route.view === 'home' && !session
   // A cream document under a dark green bar is two designs meeting at a
   // hard edge. Reader surfaces get a header in their own key.
   const reading = ['report', 'myreport', 'authorreport', 'portal'].includes(route.view) || !!session
@@ -168,9 +155,11 @@ export default function App() {
       {route.view === 'portal' && (
         <PortalPage key={`portal:${route.id}:${route.key}`} id={route.id} shareKey={route.key} locale={locale} />
       )}
+      {route.view === 'invalid' && <main className="doc inst"><div className="gone" role="alert"><h1>{locale==='fr'?'Lien invalide':'Invalid link'}</h1><p>{locale==='fr'?'Ce lien est incomplet ou contient un identifiant invalide. Ouvrez le rapport depuis votre espace client ou vérifiez le lien complet.':'This link is incomplete or contains an invalid identifier. Open the report from your client workspace or check the full link.'}</p><a href={session?'#/reports':'#/analysis'}>{locale==='fr'?'Ouvrir votre espace client →':'Open your workspace →'}</a></div></main>}
       {['studio','authorreport'].includes(route.view) && portalMode === null && <div className="doc inst"><p role={deploymentError ? 'alert' : 'status'}>{deploymentError ? 'The workspace could not be opened. Please reload to try again.' : 'Opening workspace…'}</p></div>}
       {route.view === 'studio' && portalMode === false && <Studio locale={locale} />}
       {clientStudio && (session ? <Suspense fallback={<WorkspaceState />}><ClientAnalysisWorkspace key={session.user.username+':'+session.token} session={session} onExpired={()=>signOut(true)} onSignOut={()=>signOut()}/></Suspense> : <WorkspaceSignIn onSignIn={signIn} expired={sessionExpired}/>)}
+      {route.view === 'publication' && (session ? <Suspense fallback={<WorkspaceState />}><PublishedReview key={route.id+':'+session.token} id={route.id} session={session} onExpired={()=>signOut(true)} onSignOut={()=>signOut()}/></Suspense> : <WorkspaceSignIn onSignIn={signIn} expired={sessionExpired}/>)}
       {route.view === 'clientreports' && (session ? <ClientHome session={session} locale={locale} onSignOut={()=>signOut()} onLocaleChange={chooseLocale} /> : <WorkspaceSignIn onSignIn={signIn} expired={sessionExpired}/>)}
       {route.view === 'home' &&
         (session ? (

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import store
 from .bootstrap import bootstrap
-from .routers import accounts, analysis_studio, analytics, ask, financial, ingest, reports
+from .routers import accounts, analysis_studio, analytics, ask, financial, ingest, publications, reports
 from .schema import BLOCK_TYPES
 
 VERSION = "0.3.0"
@@ -47,6 +47,7 @@ app.include_router(ask.router, prefix="/v1")
 app.include_router(accounts.router, prefix="/v1")
 app.include_router(analytics.router, prefix="/v1")
 app.include_router(financial.router, prefix="/v1")
+app.include_router(publications.router, prefix="/v1")
 app.include_router(analysis_studio.router, prefix="/v1")
 
 
@@ -56,7 +57,7 @@ def health():
         "ok": True,
         "version": VERSION,
         "revision": os.getenv("LUMNIA_BUILD_SHA") or os.getenv("RAILWAY_GIT_COMMIT_SHA") or None,
-        "features": ["analysis-studio", "combined-financial-upload", "client-financial-reviews"],
+        "features": ["analysis-studio", "combined-financial-upload", "client-financial-reviews", "review-publications"],
         "block_types": list(BLOCK_TYPES),
         "orgs": len(store.list_orgs()),
         "reports": len(store.list_reports()),

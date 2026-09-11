@@ -265,14 +265,14 @@ def test_saved_analysis_and_financial_reviews_enforce_versions_and_owners(pg_dat
     assert snapshot_legacy(pg_database["dsn"]) == baseline
     with psycopg.connect(pg_database["dsn"], row_factory=dict_row) as connection:
         tables = connection.execute("SELECT table_schema,table_name FROM information_schema.tables WHERE table_schema IN ('public','lumnia_studio')").fetchall()
-        for name in ("financial_reviews", "analysis_studio_dashboards", "analysis_studio_definitions",
+        for name in ("financial_reviews", "review_publications", "analysis_studio_dashboards", "analysis_studio_definitions",
                      "analysis_studio_definition_history", "analysis_studio_ai_connections", "contexts"):
             assert {"table_schema": "lumnia_studio", "table_name": name} in tables
             assert {"table_schema": "public", "table_name": name} not in tables
         foreign_keys = connection.execute("""SELECT c.conname FROM pg_constraint c
             JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace
             WHERE n.nspname='lumnia_studio' AND c.contype='f' AND c.confrelid='public.orgs'::regclass""").fetchall()
-        assert len(foreign_keys) == 6
+        assert len(foreign_keys) == 7
     assert not pg_database["sqlite"].exists()
 
 
@@ -318,6 +318,67 @@ def test_concurrent_first_definitions_write_has_one_history_entry(pg_database):
                 history = connection.execute("SELECT version,doc FROM lumnia_studio.analysis_studio_definition_history ORDER BY version").fetchall()
                 assert [row["version"] for row in history] == list(range(1, expected_version + 2))
                 assert json.loads(history[-1]["doc"])["fields"] == winner["fields"]
+
+
+def test_published_reviews_lifecycle_and_restart_preserve_legacy_reports(pg_database):
+    """Use real PostgreSQL row locks, JSON snapshots and original opaque sessions."""
+    baseline = snapshot_legacy(pg_database["dsn"])
+    app = portal.create_app()
+    scope = {"org": "client-a"}
+    base = "/v1/review-publications"
+    with TestClient(app) as client:
+        health = client.get("/v1/health").json()
+        assert "review-publications" in health["features"]
+        assert health["publishing_enabled"] is False
+        saved = client.post("/v1/financial-reviews", params=scope, headers=auth(), json=financial_document()).json()
+        body = {"review_id": saved["id"], "expected_version": 1}
+        # More callers than the five-connection pool prove publication does
+        # not need a nested checkout while holding the source row lock.
+        barrier = Barrier(6)
+
+        def publisher(_):
+            worker = TestClient(app)
+            barrier.wait(timeout=10)
+            return worker.post(base, params=scope, headers=auth(), json=body)
+
+        with ThreadPoolExecutor(max_workers=6) as workers:
+            responses = list(workers.map(publisher, range(6)))
+        assert sorted(r.status_code for r in responses) == [200, 200, 200, 200, 200, 201], [r.text for r in responses]
+        published = responses[0].json()
+        assert all(published == r.json() for r in responses)
+        assert published["review"] == saved["review"]
+        url = base + "/" + published["id"]
+        for headers, query in ((auth("bob"), scope), (auth("carol"), scope), (auth(), {"org": "client-b"})):
+            assert client.get(url, params=query, headers=headers).status_code == 404
+            assert client.post(base, params=query, headers=headers, json=body).status_code == 404
+            assert client.post(url + "/trash", params=query, headers=headers, json={"expected_version": 1}).status_code == 404
+            assert client.delete(url, params={**query, "expected_version": 1}, headers=headers).status_code == 404
+        # Draft deletion cannot remove the frozen report or its provenance.
+        assert client.delete("/v1/financial-reviews/" + saved["id"], params={**scope, "expected_version": 1}, headers=auth()).status_code == 204
+        assert client.get(url, params=scope, headers=auth()).json() == published
+    with TestClient(portal.create_app()) as client:
+        assert client.get(url, params=scope, headers=auth()).json() == published
+        for action, version in (("trash", 1), ("restore", 2), ("trash", 3)):
+            barrier = Barrier(2)
+
+            def transition(_):
+                worker = TestClient(app)
+                barrier.wait(timeout=10)
+                return worker.post(url + "/" + action, params=scope, headers=auth(), json={"expected_version": version})
+
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                responses = list(workers.map(transition, (1, 2)))
+            assert sorted(r.status_code for r in responses) == [200, 409], [r.text for r in responses]
+            winner = next(r.json() for r in responses if r.status_code == 200)
+            assert winner["version"] == version + 1 and winner["review"] == published["review"]
+        assert client.get(base, params=scope, headers=auth()).json() == []
+        assert client.get(base, params={**scope, "status": "trashed"}, headers=auth()).json()[0]["id"] == published["id"]
+        assert client.delete(url, params={**scope, "expected_version": 3}, headers=auth()).status_code == 409
+        assert client.delete(url, params={**scope, "expected_version": 4}, headers=auth()).status_code == 204
+        assert client.get(url, params=scope, headers=auth()).status_code == 404
+        assert client.get("/v1/reports/legacy-q1", params={"k": SHARE_KEY}).json() == SEED_REPORT
+    assert snapshot_legacy(pg_database["dsn"]) == baseline
+    assert not pg_database["sqlite"].exists()
 
 
 def test_expired_disabled_and_recreated_accounts_cannot_reuse_owner(pg_database):

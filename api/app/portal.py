@@ -19,7 +19,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from . import portal_db as db, postgres
 from .portal_security import Throttle, verify_password
-from .routers import analysis_studio, financial
+from .routers import analysis_studio, financial, publications
 
 VERSION = "0.3.0"
 
@@ -120,7 +120,7 @@ def create_app() -> FastAPI:
         return {
             "ok": True, "version": VERSION, "deployment_mode": "portal",
             "revision": os.getenv("LUMNIA_BUILD_SHA") or os.getenv("RAILWAY_GIT_COMMIT_SHA") or None,
-            "features": ["analysis-studio", "combined-financial-upload", "client-financial-reviews"],
+            "features": ["analysis-studio", "combined-financial-upload", "client-financial-reviews", "review-publications"],
             "publishing_enabled": False,
         }
 
@@ -190,6 +190,7 @@ def create_app() -> FastAPI:
     # validation, creating only Studio's additive tables on the same database.
     app.include_router(analysis_studio.router, prefix="/v1")
     app.include_router(financial.router, prefix="/v1")
+    app.include_router(publications.router, prefix="/v1")
 
     @app.get("/signup", include_in_schema=False)
     def signup_page():

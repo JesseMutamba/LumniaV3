@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { BEFORE_WORKSPACE_NAVIGATION, subscribeWorkspaceNavigation } from '../src/lib/workspace-navigation.js'
+import { BEFORE_WORKSPACE_NAVIGATION, requestWorkspaceNavigation, subscribeWorkspaceNavigation } from '../src/lib/workspace-navigation.js'
 
 const target = new EventTarget()
 target.CustomEvent = CustomEvent
@@ -24,4 +24,18 @@ assert.deepEqual(routes, ['#/reports', '#/analysis'], 'Clean navigation proceeds
 unsubscribe()
 navigate('#/reports')
 assert.equal(routes.length, 2, 'Unmount removes the history listener')
-console.log('PASS Workspace history preserves unsaved changes and resumes approved navigation.')
+
+let client = 'original-client', clientChanges = 0
+target.addEventListener(BEFORE_WORKSPACE_NAVIGATION, unsaved)
+requestWorkspaceNavigation(() => {client = 'next-client';clientChanges++}, target)
+assert.equal(client, 'original-client', 'Client selection keeps the current workspace mounted until unsaved work is resolved')
+assert.equal(clientChanges, 0, 'Cancelling the client change does not run its action')
+pending()
+pending()
+assert.equal(client, 'next-client', 'Save/continue resumes the originally selected client')
+assert.equal(clientChanges, 1, 'An approved client change runs once')
+target.removeEventListener(BEFORE_WORKSPACE_NAVIGATION, unsaved)
+requestWorkspaceNavigation(() => {client = 'clean-client';clientChanges++}, target)
+assert.equal(client, 'clean-client', 'A clean client workspace switches immediately')
+assert.equal(clientChanges, 2)
+console.log('PASS Workspace history and client selection preserve unsaved changes and resume approved navigation.')
