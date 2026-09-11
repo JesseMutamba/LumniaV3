@@ -2,7 +2,11 @@
 (() => {
   function sync() {
     const hash = window.location.hash || '#/'
-    if (/^#\/(?:analysis|studio|financial)(?:[/?]|$)/.test(hash)) {
+    if (hash === '#signin') {
+      window.location.replace('/workspace/#/analysis')
+      return
+    }
+    if (/^#\/(?:analysis|studio|financial|reports)(?:[/?]|$)/.test(hash)) {
       window.location.replace('/workspace/' + hash)
       return
     }

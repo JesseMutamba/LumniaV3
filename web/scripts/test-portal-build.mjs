@@ -56,10 +56,11 @@ function exercise(startHash) {
   return { redirects, entry, window, listeners }
 }
 await test('Only the new analysis paths redirect, retaining their full hash', () => {
-  for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio']) {
+  for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports']) {
     assert.deepEqual(exercise(route).redirects, ['/workspace/' + route])
   }
-  for (const route of ['', '#/', '#signin', '#contact', '#/studio-other', '#/analysis-other']) {
+  assert.deepEqual(exercise('#signin').redirects, ['/workspace/#/analysis'])
+  for (const route of ['', '#/', '#contact', '#/studio-other', '#/analysis-other']) {
     const result = exercise(route)
     assert.deepEqual(result.redirects, [])
     assert.equal(result.entry.hidden, false)

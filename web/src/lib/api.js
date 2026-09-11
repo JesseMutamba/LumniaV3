@@ -113,19 +113,29 @@ export const portalUrl = (org) =>
    storage key, separate header, and it must never be sent to /studio. */
 const SESSION_KEY = 'lumnia.session'
 let memorySession = null
+let memorySessionOnly = false
+
+const validSession = s => Boolean(
+  s && typeof s.token === 'string' && s.token.trim() &&
+  typeof s.user?.username === 'string' && s.user.username.trim() &&
+  typeof s.org?.id === 'string' && s.org.id.trim() &&
+  typeof s.expires_at === 'number' && Number.isFinite(s.expires_at) &&
+  s.expires_at * 1000 > Date.now()
+)
 
 export const getSession = () => {
+  if (memorySessionOnly) return validSession(memorySession) ? memorySession : null
+  let raw
   try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return memorySession && memorySession.expires_at * 1000 > Date.now() ? memorySession : null
-    const s = JSON.parse(raw)
-    // Expiry is checked here so a stale tab shows the sign-in form rather
-    // than a list of reports that all 401 when clicked.
-    if (!s?.token || (s.expires_at ?? 0) * 1000 < Date.now()) return null
-    return s
+    raw = localStorage.getItem(SESSION_KEY)
   } catch {
-    return memorySession && memorySession.expires_at * 1000 > Date.now() ? memorySession : null
+    return validSession(memorySession) ? memorySession : null
   }
+  // A readable but empty storage key means another tab signed out. Only
+  // unavailable storage may fall back to an in-memory session.
+  try { memorySession = raw ? JSON.parse(raw) : null } catch { memorySession = null }
+  if (!validSession(memorySession)) memorySession = null
+  return memorySession
 }
 
 export const setSession = (s) => {
@@ -133,8 +143,10 @@ export const setSession = (s) => {
   try {
     if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s))
     else localStorage.removeItem(SESSION_KEY)
+    memorySessionOnly = false
   } catch {
     // private browsing: the session lives for this page load only
+    memorySessionOnly = true
   }
 }
 
@@ -153,6 +165,13 @@ const sessionHeaders = () => {
 export const login = (username, password) =>
   req('/auth/login', { method: 'POST', body: { username, password } })
 
+// Accept the captured session so explicit sign-out may clear browser state
+// immediately while this request revokes the same server session.
+export const logout = (session = getSession()) => {
+  if (typeof session?.token !== 'string' || !session.token.trim()) return Promise.resolve(null)
+  return reqAs('/auth/logout', { Authorization: `Bearer ${session.token}` }, { method: 'POST', credentials: 'omit' })
+}
+
 export const whoami = () => reqAs('/auth/me', sessionHeaders())
 export const myReports = () => reqAs('/me/reports', sessionHeaders())
 
@@ -160,8 +179,9 @@ export const myReports = () => reqAs('/me/reports', sessionHeaders())
  *  browser history, the session says who they are. */
 export const getMyReport = (id) => reqAs(`/reports/${id}`, sessionHeaders())
 
-async function reqAs(path, headers) {
-  const r = await fetch(`${BASE}${path}`, { headers })
+async function reqAs(path, headers, options = {}) {
+  const r = await fetch(`${BASE}${path}`, { ...options, headers })
+  if (r.status === 204) return null
   const text = await r.text()
   let data
   try {

@@ -22,6 +22,7 @@ const legacy = {
 }
 globalThis.fetch = async (url, options = {}) => {
   calls.push({ url: new URL(url, window.location.origin), options })
+  if (String(url).endsWith('/auth/logout')) return new Response(null, { status: 204 })
   return Response.json(String(url).endsWith('/auth/login') ? legacy : { ok: true })
 }
 let passed = 0
@@ -100,6 +101,58 @@ try {
     const request = api.createFinancialRequest({ principal: 'client', org: 'estate', retainFiles: false })
     await assert.rejects(request('/v1/financial-reviews', { method: 'POST', body: '{}' }), /disabled/)
     assert.equal(calls.length, count)
+  })
+  await test('Malformed persisted session identities cannot reach the workspace', () => {
+    for (const session of [null, [], { ...legacy, user: null }, { ...legacy, user: {} },
+      { ...legacy, user: { username: ' ' } }, { ...legacy, org: null }, { ...legacy, org: { id: '' } },
+      { ...legacy, token: {} }, { ...legacy, expires_at: 'never' }, { ...legacy, expires_at: null }]) {
+      values.set('lumnia.session', JSON.stringify(session))
+      assert.equal(api.getSession(), null)
+    }
+    values.set('lumnia.session', '{broken json')
+    assert.equal(api.getSession(), null)
+    api.setSession(legacy)
+  })
+  await test('Removing the session in another tab does not revive the memory copy', () => {
+    api.setSession(legacy)
+    values.delete('lumnia.session')
+    assert.equal(api.getSession(), null)
+    api.setSession(legacy)
+  })
+  await test('Explicit sign-out revokes the captured client token after local state clears', async () => {
+    const captured = api.getSession()
+    api.setToken('separate-author-token')
+    api.setSession(null)
+    assert.equal(await api.logout(captured), null)
+    const { url, options } = calls.at(-1)
+    assert.equal(url.pathname, '/v1/auth/logout')
+    assert.equal(options.method, 'POST')
+    assert.equal(options.credentials, 'omit')
+    assert.equal(new Headers(options.headers).get('Authorization'), 'Bearer test-session-token')
+    assert.equal(api.getSession(), null)
+    const count = calls.length
+    assert.equal(await api.logout(), null)
+    assert.equal(calls.length, count)
+    api.setToken('')
+  })
+  await test('Unavailable browser storage still supports this page session and sign-out', () => {
+    const workingStorage = globalThis.localStorage
+    globalThis.localStorage = {
+      getItem() { throw new Error('Storage unavailable') },
+      setItem() { throw new Error('Storage unavailable') },
+      removeItem() { throw new Error('Storage unavailable') },
+    }
+    try {
+      api.setSession(legacy)
+      assert.deepEqual(api.getSession(), legacy)
+      api.setSession({ ...legacy, user: null })
+      assert.equal(api.getSession(), null)
+      api.setSession(null)
+      assert.equal(api.getSession(), null)
+    } finally {
+      globalThis.localStorage = workingStorage
+      api.setSession(null)
+    }
   })
   console.log(`${passed} portal client compatibility checks passed.`)
 } finally {

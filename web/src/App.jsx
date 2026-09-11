@@ -5,9 +5,11 @@ const ClientAnalysisWorkspace=lazy(()=>import('./pages/GeneralWorkspace.jsx').th
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import Landing from './pages/Landing.jsx'
 import ClientHome from './pages/ClientHome.jsx'
+import WorkspaceSignIn, { WorkspaceState } from './pages/WorkspaceSignIn.jsx'
 import * as api from './lib/api.js'
 import { t } from './lib/format.js'
 import { LumniaLogo } from './components/branding/LumniaBrand'
+import { subscribeWorkspaceNavigation } from './lib/workspace-navigation.js'
 
 /**
  * Four surfaces, one build.
@@ -38,7 +40,9 @@ function parseHash() {
   const c = path.match(/^\/c\/([^/?]+)/)
   if (c) return { view: 'portal', id: decodeURIComponent(c[1]), key: q.get('k') }
   if (path === '/analysis' || path === '/financial') return {view:'clientstudio'}
+  if (path === '/reports') return {view:'clientreports'}
   if (path.startsWith('/studio')) return { view: 'studio' }
+  if (/^\/workspace(?:\/|$)/.test(location.pathname)) return {view:'clientstudio'}
   return { view: 'home' }
 }
 
@@ -64,6 +68,7 @@ export default function App() {
   const [session, setSess] = useState(api.getSession)
   const [portalMode, setPortalMode] = useState(null)
   const [deploymentError, setDeploymentError] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -77,13 +82,16 @@ export default function App() {
     const s = await api.login(username, password)
     api.setSession(s)
     setSess(s)
-    location.hash = route.view==='clientstudio'||portalMode&&route.view==='studio'?'#/analysis':'#/'
+    setSessionExpired(false)
+    location.hash = route.view === 'clientreports' ? '#/reports' : route.view==='clientstudio'||portalMode&&route.view==='studio'?'#/analysis':'#/'
   }
 
-  function signOut() {
+  function signOut(expired = false) {
+    if (expired !== true) void api.logout().catch(() => {})
     api.setSession(null)
     setSess(null)
-    location.hash = '#/'
+    setSessionExpired(expired === true)
+    location.hash = '#/analysis'
   }
 
   const chooseLocale = (l) => {
@@ -96,9 +104,18 @@ export default function App() {
   }
 
   useEffect(() => {
-    const on = () => setRoute(parseHash())
-    addEventListener('hashchange', on)
-    return () => removeEventListener('hashchange', on)
+    return subscribeWorkspaceNavigation(() => setRoute(parseHash()))
+  }, [])
+
+  useEffect(() => {
+    const syncSession = event => {
+      if (event.key !== 'lumnia.session' && event.key !== null) return
+      const next = api.getSession()
+      setSess(next)
+      if (!next) setSessionExpired(true)
+    }
+    addEventListener('storage', syncSession)
+    return () => removeEventListener('storage', syncSession)
   }, [])
 
   // The page must tell the truth about its language, or Chrome's
@@ -111,7 +128,8 @@ export default function App() {
   // the platform bar — and a language toggle with nothing to toggle — would
   // be two headers arguing with each other.
   const clientStudio = route.view === 'clientstudio' || route.view === 'studio' && portalMode === true
-  const bare = (route.view === 'home' || clientStudio) && !session
+  const clientReports = route.view === 'clientreports' || route.view === 'home' && !!session
+  const bare = clientStudio || clientReports || route.view === 'home' && !session
   // A cream document under a dark green bar is two designs meeting at a
   // hard edge. Reader surfaces get a header in their own key.
   const reading = ['report', 'myreport', 'authorreport', 'portal'].includes(route.view) || !!session
@@ -145,17 +163,18 @@ export default function App() {
       {route.view === 'authorreport' && portalMode === false && <Viewer key={'author:' + route.id} id={route.id} author locale={locale} />}
       {route.view === 'authorreport' && portalMode === true && <div className="doc inst"><p>Open published reports from your client workspace or their shared link.</p><a href="#/">Open client workspace →</a></div>}
       {route.view === 'myreport' && (
-        <Viewer key={`mine:${route.id}`} id={route.id} mine locale={locale} onExpired={signOut} />
+        <Viewer key={`mine:${route.id}`} id={route.id} mine locale={locale} onExpired={()=>signOut(true)} />
       )}
       {route.view === 'portal' && (
         <PortalPage key={`portal:${route.id}:${route.key}`} id={route.id} shareKey={route.key} locale={locale} />
       )}
       {['studio','authorreport'].includes(route.view) && portalMode === null && <div className="doc inst"><p role={deploymentError ? 'alert' : 'status'}>{deploymentError ? 'The workspace could not be opened. Please reload to try again.' : 'Opening workspace…'}</p></div>}
       {route.view === 'studio' && portalMode === false && <Studio locale={locale} />}
-      {clientStudio && (session ? <Suspense fallback={<p>Opening analysis…</p>}><ClientAnalysisWorkspace key={session.user.username+':'+session.token} session={session} onExpired={signOut}/></Suspense> : <Landing onSignIn={signIn}/>)}
+      {clientStudio && (session ? <Suspense fallback={<WorkspaceState />}><ClientAnalysisWorkspace key={session.user.username+':'+session.token} session={session} onExpired={()=>signOut(true)} onSignOut={()=>signOut()}/></Suspense> : <WorkspaceSignIn onSignIn={signIn} expired={sessionExpired}/>)}
+      {route.view === 'clientreports' && (session ? <ClientHome session={session} locale={locale} onSignOut={()=>signOut()} onLocaleChange={chooseLocale} /> : <WorkspaceSignIn onSignIn={signIn} expired={sessionExpired}/>)}
       {route.view === 'home' &&
         (session ? (
-          <ClientHome session={session} locale={locale} onSignOut={signOut} />
+          <ClientHome session={session} locale={locale} onSignOut={()=>signOut()} onLocaleChange={chooseLocale} />
         ) : (
           <Landing onSignIn={signIn} />
         ))}

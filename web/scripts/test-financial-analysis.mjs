@@ -22,7 +22,7 @@ function dataset(sheet,granularity,specs,year=2027,basis='projection'){
  return {name:'Unrelated client upload.xlsx',sheet,headers,rows,financial:{metrics,granularity,basis,title:'Semantic table'}};
 }
 function book(datasets,name='Unrelated client upload.xlsx'){
- return {name,sourceHash:'a'.repeat(64),datasets,sheets:datasets.map(d=>({name:d.sheet,rows:[{row:1,values:['Production in tonnes'],formats:['General'],formulas:[null]}],originalRows:100,formulaCount:0,formulaErrors:0,missingFormulaResults:0,issues:[]}))};
+ return {name,sourceHash:(name==='Different actuals.xlsx'?'b':'a').repeat(64),datasets,sheets:datasets.map(d=>({name:d.sheet,rows:[{row:1,values:['Production in tonnes'],formats:['General'],formulas:[null]}],originalRows:100,formulaCount:0,formulaErrors:0,missingFormulaResults:0,issues:[]}))};
 }
 function fixture(){
  const annual=dataset('Business summary','annual',roles);

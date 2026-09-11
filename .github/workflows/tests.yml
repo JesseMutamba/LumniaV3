@@ -36,5 +36,14 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
-      - run: npm run build
+      - run: npm run build -- --base ./
         working-directory: web
+      - name: Client navigation, intake and saved-work compatibility
+        working-directory: web
+        run: |
+          node scripts/test-workspace-navigation.mjs
+          node scripts/test-portal-client.mjs
+          node scripts/test-studio-core.mjs
+          node scripts/test-studio-intake.mjs
+          node scripts/test-financial-analysis.mjs
+          node scripts/test-portal-build.mjs
