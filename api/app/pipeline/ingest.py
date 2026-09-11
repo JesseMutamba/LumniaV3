@@ -7,7 +7,7 @@ that is layer 02's job and layer 02 is not built yet.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -40,6 +40,7 @@ class Workbook:
     path: Path
     sheets: dict[str, Sheet]
     source: Source
+    warnings: list[dict] = field(default_factory=list)
 
     def __getitem__(self, name: str) -> Sheet:
         return self.sheets[name]
@@ -66,36 +67,70 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _normalise_cell(value):
+    import math, re
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    numeric = re.sub(r"[\s\u00a0\u202f]", "", text)
+    numeric = re.sub(r"^(?:USD|CDF|EUR|GBP|\$|€|£)", "", numeric, flags=re.I)
+    numeric = re.sub(r"(?:USD|CDF|EUR|GBP|\$|€|£)$", "", numeric, flags=re.I)
+    if re.fullmatch(r"[-+]?0\d+", numeric):
+        return text  # Preserve identifiers such as 00123.
+    if re.fullmatch(r"[-+]?\d+(?:[.,]\d+)*", numeric):
+        if ',' in numeric and '.' in numeric:
+            numeric = numeric.replace('.', '').replace(',', '.') if numeric.rfind(',') > numeric.rfind('.') else numeric.replace(',', '')
+        elif ',' in numeric:
+            # Three trailing digits are ambiguous: preserve the source text
+            # for mapping review instead of guessing decimal/thousands.
+            if len(numeric.rsplit(',', 1)[1]) == 3:
+                return text
+            numeric = numeric.replace(',', '.')
+        try:
+            parsed = float(numeric)
+            if math.isfinite(parsed): return parsed
+        except ValueError:
+            pass
+    return text
+
+
 def read_workbook(path: str | Path, idx: int = 0) -> Workbook:
-    """Read every sheet into a plain grid of evaluated values.
-
-    data_only=True gives us the cached formula results Excel last wrote. If a
-    workbook has never been opened by Excel those come back None — we surface
-    that as an empty sheet rather than guessing, because a guessed number is
-    exactly the thing this platform exists to not do.
-    """
+    """Read source values and retain explicit formula/cache review findings."""
+    import csv, io, zipfile
+    from xml.etree.ElementTree import iterparse
     path = Path(path)
-    wb = load_workbook(path, data_only=True, read_only=True)
-    sheets: dict[str, Sheet] = {}
-    total_rows = 0
-
-    for ws in wb.worksheets:
-        grid = [list(r) for r in ws.iter_rows(values_only=True)]
-        # trim trailing blank rows — openpyxl pads generously
-        while grid and not any(c is not None for c in grid[-1]):
-            grid.pop()
-        sheets[ws.title] = Sheet(ws.title, grid)
-        total_rows += len(grid)
-
-    wb.close()
-    return Workbook(
-        path=path,
-        sheets=sheets,
-        source=Source(
-            idx=idx,
-            filename=path.name,
-            sha256=sha256(path),
-            sheets=len(sheets),
-            rows_read=total_rows,
-        ),
-    )
+    sheets, warnings = {}, []
+    if path.suffix.lower() in ('.csv', '.tsv'):
+        text = path.read_text(encoding='utf-8-sig')
+        dialect = csv.Sniffer().sniff(text[:8192], delimiters=',;\t|')
+        grid = [[_normalise_cell(v) for v in row] for row in csv.reader(io.StringIO(text), dialect)]
+        sheets['Data'] = Sheet('Data', grid)
+    else:
+        with zipfile.ZipFile(path) as archive:
+            if sum(info.file_size for info in archive.infolist()) > 160 * 1024 * 1024:
+                raise ValueError('Workbook expands beyond the supported size.')
+        book = load_workbook(path, data_only=True, read_only=True)
+        try:
+            for ws in book.worksheets:
+                if ws.max_row * ws.max_column > 10_000_000:
+                    raise ValueError('Worksheet dimensions exceed the supported size.')
+                grid = [[_normalise_cell(v) for v in row] for row in ws.iter_rows(values_only=True)]
+                while grid and not any(v is not None for v in grid[-1]): grid.pop()
+                sheets[ws.title] = Sheet(ws.title, grid)
+                with zipfile.ZipFile(path) as archive:
+                    with archive.open(ws._worksheet_path) as stream:
+                        for _, cell in iterparse(stream, events=('end',)):
+                            if cell.tag.rsplit('}', 1)[-1] != 'c': continue
+                            children = {el.tag.rsplit('}',1)[-1]: el for el in cell}
+                            cached = children.get('v')
+                            if cell.get('t') == 'e':
+                                warnings.append({'sheet': ws.title, 'cells': cell.get('r'), 'detail': 'Spreadsheet formula error: ' + (cached.text if cached is not None and cached.text else 'unknown')})
+                            elif 'f' in children and (cached is None or cached.text is None):
+                                warnings.append({'sheet': ws.title, 'cells': cell.get('r'), 'detail': 'Formula has no cached result. Recalculate and save in your spreadsheet application.'})
+                            cell.clear()
+        finally:
+            book.close()
+    return Workbook(path=path, sheets=sheets, warnings=warnings,
+                    source=Source(idx=idx, filename=path.name, sha256=sha256(path), sheets=len(sheets), rows_read=sum(s.rows for s in sheets.values())))

@@ -20,80 +20,71 @@ MAX_CHANGES = 40  # the diff points the eye; the workbook holds the truth
 
 
 def snapshot(wb: Workbook, tables: list[DetectedTable]) -> dict:
-    """Compact record of what was detected: per sheet, rows keyed by their
-    label, numeric cells keyed by their column header."""
-    out: dict = {"tables": {}}
-    for t in tables:
-        sheet = wb[t.sheet]
+    """Preserve every table/row/header occurrence; never overwrite a value."""
+    import json
+    from collections import Counter
+    out = {"schema_version": 2, "tables": {}, "notes": []}
+    occurrences = Counter()
+    for t in sorted(tables, key=lambda item: (item.sheet, item.header_row)):
         text_cols = [c for c in t.columns if c.kind == "text"]
         num_cols = [c for c in t.columns if c.kind == "number"]
         if not text_cols or not num_cols:
             continue
-        label_col = text_cols[0]
-        rows: dict = {}
+        signature = json.dumps([t.sheet, [c.label for c in t.columns]], ensure_ascii=False)
+        occurrences[signature] += 1
+        key = json.dumps([signature, occurrences[signature]])
+        table = {"sheet": t.sheet, "cells": t.cells, "rows": {}}
+        labels = Counter()
         for r in range(t.first_row, t.last_row + 1):
-            label = sheet.cell(r, label_col.index)
-            if not isinstance(label, str) or not label.strip():
+            label = wb[t.sheet].cell(r, text_cols[0].index)
+            if label is None or not str(label).strip():
                 continue
-            vals = {}
+            label = str(label).strip()
+            labels[label] += 1
+            row = {"label": label, "source_row": r, "values": {}}
+            cols = Counter()
             for c in num_cols:
-                v = sheet.cell(r, c.index)
-                if isinstance(v, (int, float)) and not isinstance(v, bool):
-                    vals[c.label] = float(v)
-            if vals:
-                rows[label.strip()] = vals
-        out["tables"][t.sheet] = {"cells": t.cells, "rows": rows}
+                cols[c.label] += 1
+                value = wb[t.sheet].cell(r, c.index)
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    row["values"][json.dumps([c.label, cols[c.label]])] = {"label": c.label, "n": float(value), "source_col": c.index}
+            table["rows"][json.dumps([label, labels[label]], ensure_ascii=False)] = row
+        if any(n > 1 for n in labels.values()):
+            out["notes"].append(f"{t.sheet}: repeated labels are matched by occurrence; review changes after reordering.")
+        if occurrences[signature] > 1:
+            out["notes"].append(f"{t.sheet}: repeated table headers are matched by occurrence.")
+        out["tables"][key] = table
     return out
 
 
 def diff(prev: dict, curr: dict, threshold_pct: float) -> dict:
-    """What changed between two snapshots of the same file.
-
-    Returns {changes, alerts, notes}: every value movement (capped), the
-    subset beyond the threshold, and structural observations in prose.
-    """
-    changes: list[dict] = []
-    notes: list[str] = []
-    p_tables = prev.get("tables", {})
-    c_tables = curr.get("tables", {})
-
-    for sheet in sorted(set(c_tables) - set(p_tables)):
-        notes.append(f"nouveau tableau : {sheet}")
-    for sheet in sorted(set(p_tables) - set(c_tables)):
-        notes.append(f"tableau disparu : {sheet}")
-
-    for sheet in sorted(set(p_tables) & set(c_tables)):
-        p_rows = p_tables[sheet]["rows"]
-        c_rows = c_tables[sheet]["rows"]
-        added = sorted(set(c_rows) - set(p_rows))
-        gone = sorted(set(p_rows) - set(c_rows))
-        if added:
-            notes.append(f"{sheet} : ligne(s) nouvelle(s) — " + ", ".join(added[:5]))
-        if gone:
-            notes.append(f"{sheet} : ligne(s) disparue(s) — " + ", ".join(gone[:5]))
-        for label in sorted(set(p_rows) & set(c_rows)):
-            for col in sorted(set(p_rows[label]) & set(c_rows[label])):
-                before, after = p_rows[label][col], c_rows[label][col]
-                if before == after:
-                    continue
-                pct = round((after - before) / abs(before) * 100, 1) if before else None
-                changes.append(
-                    {
-                        "sheet": sheet,
-                        "label": label,
-                        "column": col,
-                        "before": before,
-                        "after": after,
-                        "pct": pct,
-                    }
-                )
-
-    dropped = len(changes) - MAX_CHANGES
-    changes = changes[:MAX_CHANGES]
-    if dropped > 0:
-        notes.append(f"{dropped} changement(s) de plus non listés")
-
-    alerts = [
-        c for c in changes if c["pct"] is None or abs(c["pct"]) >= threshold_pct
-    ]
-    return {"changes": changes, "alerts": alerts, "notes": notes}
+    """Prioritize all significant changes before limiting the displayed list."""
+    if prev.get("schema_version") != 2 or curr.get("schema_version") != 2:
+        return {"changes": [], "alerts": [], "notes": ["Comparison baseline refreshed to preserve duplicate rows and tables. The next upload will be compared."], "changes_total": 0, "alerts_total": 0}
+    changes, notes = [], list(curr.get("notes", []))
+    p_tables, c_tables = prev["tables"], curr["tables"]
+    for key in set(c_tables) - set(p_tables):
+        notes.append(f"nouveau tableau : {c_tables[key]['sheet']}")
+    for key in set(p_tables) - set(c_tables):
+        notes.append(f"tableau disparu : {p_tables[key]['sheet']}")
+    for key in sorted(set(p_tables) & set(c_tables)):
+        sheet = c_tables[key]["sheet"]
+        pr, cr = p_tables[key]["rows"], c_tables[key]["rows"]
+        for added in sorted(set(cr) - set(pr)):
+            notes.append(f"{sheet} : ligne nouvelle — {cr[added]['label']}")
+        for gone in sorted(set(pr) - set(cr)):
+            notes.append(f"{sheet} : ligne disparue — {pr[gone]['label']}")
+        for row_key in sorted(set(pr) & set(cr)):
+            pv, cv = pr[row_key]["values"], cr[row_key]["values"]
+            if set(pv) != set(cv):
+                notes.append(f"{sheet} / {cr[row_key]['label']}: numeric columns or missing values changed.")
+            for col in sorted(set(pv) & set(cv)):
+                before, after = pv[col]["n"], cv[col]["n"]
+                if before != after:
+                    changes.append({"sheet": sheet, "label": cr[row_key]["label"], "column": cv[col]["label"], "before": before, "after": after, "pct": round((after-before)/abs(before)*100, 1) if before else None})
+    alerts = [c for c in changes if c["pct"] is None or abs(c["pct"]) >= threshold_pct]
+    alerts.sort(key=lambda c: abs(c["pct"]) if c["pct"] is not None else float("inf"), reverse=True)
+    other = [c for c in changes if c["pct"] is not None and abs(c["pct"]) < threshold_pct]
+    if len(changes) > MAX_CHANGES:
+        notes.append(f"{len(changes)-MAX_CHANGES} changement(s) de plus non listés; {len(alerts)} alert(s) in total.")
+    return {"changes": (alerts+other)[:MAX_CHANGES], "alerts": alerts[:MAX_CHANGES], "notes": notes, "changes_total": len(changes), "alerts_total": len(alerts)}

@@ -7,12 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "build:demo": "VITE_STATIC=1 vite build --base ./",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:analytics": "node scripts/test-analytics.mjs",
+    "test:studio": "node scripts/test-studio-core.mjs"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
+    "lucide-react": "^1.31.0",
+    "radix-ui": "^1.6.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

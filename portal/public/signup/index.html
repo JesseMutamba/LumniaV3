@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Request a Lumnia pilot. Send the files your operation already produces; we return a verified report where every figure traces to its source cell." />
+  <title>Request a pilot · Lumnia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Spectral:ital,wght@0,300;0,400;1,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root{
+      --ink:#0b0d0a; --panel:#13160f; --line:rgba(235,231,222,.14);
+      --text:#ebe7de; --mut:rgba(235,231,222,.62); --dim:rgba(235,231,222,.42);
+      --gold:#c8a84c; --gold-dim:#a8842e; --bad:#cf5f42;
+      --serif:"Spectral",Georgia,serif; --sans:"Hanken Grotesk",-apple-system,sans-serif;
+      --mono:"JetBrains Mono",ui-monospace,monospace;
+    }
+    *{margin:0;box-sizing:border-box}
+    body{background:var(--ink);color:var(--text);font-family:var(--sans);font-weight:300;
+      min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+    a{color:inherit}
+    .nav{display:flex;align-items:center;gap:14px;padding:22px 40px;border-bottom:1px solid var(--line)}
+    .brand{font-family:var(--serif);font-size:19px;letter-spacing:.34em;text-decoration:none}
+    .back{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.18em;
+      text-transform:uppercase;color:var(--mut);text-decoration:none;border:1px solid var(--line);
+      border-radius:3px;padding:9px 14px}
+    .back:hover{color:var(--text);border-color:var(--gold-dim)}
+    main{flex:1;width:100%;max-width:1060px;margin:0 auto;padding:64px 24px 80px;
+      display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start}
+    .ey{font-family:var(--mono);font-size:10px;letter-spacing:.32em;text-transform:uppercase;
+      color:var(--gold);margin-bottom:16px}
+    h1{font-family:var(--serif);font-weight:300;font-size:40px;line-height:1.12;margin-bottom:18px}
+    .lede{font-size:16px;line-height:1.7;color:var(--mut);max-width:46ch;margin-bottom:34px}
+    ol{list-style:none;counter-reset:s;display:grid;gap:22px;padding:0}
+    ol li{counter-increment:s;display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+    ol li::before{content:"0" counter(s);font-family:var(--mono);font-size:11px;color:var(--gold-dim);
+      letter-spacing:.12em;padding-top:3px}
+    ol h3{font-family:var(--sans);font-weight:500;font-size:15px;margin-bottom:5px}
+    ol p{font-size:14.5px;line-height:1.6;color:var(--dim)}
+    form{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:32px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    label{display:block;margin-bottom:16px}
+    label span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.22em;
+      text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+    input,select,textarea{width:100%;background:transparent;color:var(--text);
+      border:1px solid var(--line);border-radius:3px;padding:11px 12px;
+      font-family:var(--sans);font-weight:300;font-size:15px}
+    textarea{resize:vertical;min-height:88px;line-height:1.6}
+    select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),
+      linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+      background-position:calc(100% - 17px) 19px,calc(100% - 12px) 19px;
+      background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+    select option{background:var(--panel);color:var(--text)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold-dim)}
+    .req{color:var(--gold-dim)}
+    button{width:100%;margin-top:6px;background:var(--gold);color:#17190f;border:0;border-radius:3px;
+      padding:14px 18px;font-family:var(--sans);font-weight:500;font-size:15px;cursor:pointer}
+    button:hover{background:#d9ba5e}
+    button[disabled]{opacity:.55;cursor:default}
+    .note{margin-top:14px;font-size:12.5px;line-height:1.6;color:var(--dim)}
+    .msg{margin-top:14px;font-size:14px;line-height:1.6;display:none}
+    .msg.bad{display:block;color:var(--bad)}
+    .done{display:none;text-align:left}
+    .done h2{font-family:var(--serif);font-weight:300;font-size:28px;margin-bottom:14px}
+    .done p{font-size:15.5px;line-height:1.7;color:var(--mut);margin-bottom:10px}
+    .done .ref{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:18px}
+    footer{border-top:1px solid var(--line);padding:20px 40px;font-family:var(--mono);
+      font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+    @media (max-width:860px){
+      main{grid-template-columns:1fr;gap:40px;padding:44px 20px 60px}
+      h1{font-size:31px}
+      .nav,footer{padding-left:20px;padding-right:20px}
+      .row{grid-template-columns:1fr;gap:0}
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a class="brand" href="/">LUMNIA</a>
+    <a class="back" href="/">Back to site</a>
+  </nav>
+
+  <main>
+    <section>
+      <div class="ey">Pilot</div>
+      <h1>Start with the files you already keep.</h1>
+      <p class="lede">
+        A pilot runs on the files your operation already produces, in whatever shape they
+        are in today. No template, no schema, no IT project. You get back a report where
+        every figure carries the address of the cell it came from.
+      </p>
+      <ol>
+        <li>
+          <div>
+            <h3>You send what you have</h3>
+            <p>Spreadsheets, system exports, ledgers, production or movement logs. Whatever your team records today.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>We structure and check it</h3>
+            <p>Formats reconciled, duplicates and unit errors caught, every finding shown rather than hidden.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>You receive a report and a login</h3>
+            <p>Published in French and English, opened by your team from any browser.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <form id="f" novalidate>
+        <div class="row">
+          <label><span>Name <i class="req">*</i></span>
+            <input name="name" autocomplete="name" maxlength="120" required /></label>
+          <label><span>Role</span>
+            <input name="role" autocomplete="organization-title" maxlength="120" placeholder="Finance director" /></label>
+        </div>
+        <label><span>Company <i class="req">*</i></span>
+          <input name="company" autocomplete="organization" maxlength="160" required /></label>
+        <label><span>Work email <i class="req">*</i></span>
+          <input name="email" type="email" autocomplete="email" maxlength="200" required /></label>
+        <div class="row">
+          <label><span>Country</span>
+            <input name="country" autocomplete="country-name" maxlength="80" placeholder="DR Congo" /></label>
+          <label><span>Sector</span>
+            <select name="sector">
+              <option value="">Select…</option>
+              <option>Agribusiness</option>
+              <option>Mining</option>
+              <option>Logistics &amp; transport</option>
+              <option>Manufacturing</option>
+              <option>Energy</option>
+              <option>Financial services</option>
+              <option>Other</option>
+            </select></label>
+        </div>
+        <label><span>What would you want reported?</span>
+          <textarea name="note" maxlength="2000" placeholder="The question your current reporting cannot answer."></textarea></label>
+        <button id="b" type="submit">Request a pilot</button>
+        <div class="msg" id="m"></div>
+        <p class="note">
+          We use these details to reply about a pilot, nothing else. Required fields are marked
+          <i class="req">*</i>.
+        </p>
+      </form>
+
+      <div class="done" id="done">
+        <h2>Request received.</h2>
+        <p>Thank you. We read every request ourselves and reply within two working days.</p>
+        <p>If it is useful in the meantime, the
+          <a href="/reports/sample/">sample report</a> shows exactly what a pilot returns.</p>
+        <div class="ref" id="ref"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Light where there was none · Lumnia</footer>
+
+  <script>
+    (function () {
+      var form = document.getElementById('f');
+      var btn = document.getElementById('b');
+      var msg = document.getElementById('m');
+      var done = document.getElementById('done');
+
+      function fail(text) {
+        msg.textContent = text;
+        msg.className = 'msg bad';
+        btn.disabled = false;
+        btn.textContent = 'Request a pilot';
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        msg.className = 'msg';
+        var data = Object.fromEntries(new FormData(form).entries());
+        if (!data.name || !data.company || !data.email) {
+          return fail('Name, company and work email are required.');
+        }
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email)) {
+          return fail('That email address does not look right.');
+        }
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+
+        fetch('/v1/pilot-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        }).then(function (r) {
+          return r.json().then(function (body) { return { ok: r.ok, status: r.status, body: body }; });
+        }).then(function (res) {
+          if (res.ok) {
+            form.style.display = 'none';
+            done.style.display = 'block';
+            document.getElementById('ref').textContent = 'Reference #' + res.body.id;
+            return;
+          }
+          if (res.status === 429) {
+            return fail('That is several requests from here already. Please try again in an hour.');
+          }
+          fail('Something went wrong sending that. Please try again in a moment.');
+        }).catch(function () {
+          fail('No connection. Check your network and try again.');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

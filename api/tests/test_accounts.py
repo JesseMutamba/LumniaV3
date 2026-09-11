@@ -119,7 +119,8 @@ def test_a_tampered_token_is_refused(client):
 def test_an_expired_token_is_refused(client):
     from app.auth import new_session
 
-    tok, _ = new_session("acc-j-reader", hours=-1)
+    _user(client, _org(client, "acc-exp"), "acc-exp-reader")
+    tok, _ = new_session("acc-exp-reader", hours=-1)
     assert client.get("/v1/auth/me", headers=_bearer(tok)).status_code == 401
 
 

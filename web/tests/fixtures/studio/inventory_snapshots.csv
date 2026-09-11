@@ -1,0 +1,6 @@
+Snapshot Date,SKU,Warehouse,On Hand,Unit Cost USD,Reorder Point
+2026-01-31,0012,East,10,5,8
+2026-01-31,0013,East,5,20,10
+2026-02-28,0012,East,12,5,8
+2026-02-28,0013,East,3,20,10
+2026-02-28,0012,West,4,5,6

@@ -51,11 +51,19 @@ class AskIn(BaseModel):
     plan: "Plan | None" = None    # the plan the author saw and accepted
 
 
+class PlannedFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    filename: str
+    seq: int = Field(ge=1)
+    sha256: str | None = None
+
+
 class Plan(BaseModel):
     model_config = ConfigDict(extra="forbid")
     modules: list[str] = []
     metrics: list[str] = []
     files: list[str] = []
+    file_versions: list[PlannedFile] = []
     context_version: int | None = None
     rationale: Text
     planner: str = "rules"        # "rules" | "claude" — who chose
@@ -191,10 +199,12 @@ def build_plan(question: str, ctx, org: str) -> Plan:
     # carry figures off this machine.
     if ctx and "narrate" in ctx.modules and "narrate" not in modules:
         modules = modules + ["narrate"]
+    records = store.latest_files(org, include_body=False)
     return Plan(
         modules=modules,
         metrics=metrics,
-        files=store.latest_file_names(org),
+        files=[f["filename"] for f in records],
+        file_versions=[PlannedFile(filename=f["filename"], seq=f["seq"], sha256=f["sha256"]) for f in records],
         context_version=getattr(ctx, "version", None),
         rationale=rationale,
         planner=planner,
@@ -236,7 +246,7 @@ def _catalog(org: str, ctx) -> Answer:
     for name, rec in latest.items():
         snap = (store.last_ingestion(org, name) or {}).get("summary", {})
         tables = snap.get("tables", {})
-        shown = ", ".join(list(tables)[:2])
+        shown = ", ".join(str(v.get("sheet", k)) for k,v in list(tables.items())[:2])
         if len(tables) > 2:
             shown += f" +{len(tables) - 2}"
         rows.append({
@@ -314,29 +324,31 @@ def _direct_blocks(runs: list[dict], question: str) -> tuple[list[dict], dict | 
     """Score every stored block against the question. Best match first, the
     newer run winning ties. Returns the top blocks and the run they came
     from — shared by Direct answers and by the tiles that pin them."""
+    if re.search(r"\b(?:20\d{2}|only|filter|where|seulement|january|february|march|april|may|june|july|august|september|october|november|december|janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\b", question.casefold()):
+        return [], None
     scored: list[tuple[int, int, dict, dict]] = []  # (score, -age, block, run)
     seen: set = set()
     for age, run in enumerate(runs):
         for b in run["blocks"]:
             if b.get("type") == "kpiGrid":
                 for it in b["items"]:
-                    key = ("kpi", it["label"].get("fr", ""))
+                    key = ("kpi", " ".join(v for v in it["label"].values() if v))
                     if key in seen:
                         continue
                     seen.add(key)
-                    s = _score(question, it["label"].get("fr", "")) + _score(
-                        question, (it.get("sub") or {}).get("fr", "")
+                    s = _score(question, " ".join(v for v in it["label"].values() if v)) + _score(
+                        question, " ".join(v for v in (it.get("sub") or {}).values() if v)
                     )
                     if it.get("metric"):
                         s += 2 * _score(question, it["metric"])
                     scored.append((s, -age, {"type": "kpiGrid", "items": [it]}, run))
             elif b.get("type") == "flag":
-                key = ("flag", b["title"].get("fr", ""))
+                key = ("flag", " ".join(v for v in b["title"].values() if v))
                 if key in seen:
                     continue
                 seen.add(key)
-                s = _score(question, b["tag"].get("fr", "")) + _score(
-                    question, b["title"].get("fr", "")
+                s = _score(question, " ".join(v for v in b["tag"].values() if v)) + _score(
+                    question, " ".join(v for v in b["title"].values() if v)
                 )
                 scored.append((s, -age, b, run))
     best = [(b, run) for s, _, b, run in
@@ -351,10 +363,10 @@ def _direct_blocks(runs: list[dict], question: str) -> tuple[list[dict], dict | 
     return [b for b, r in best if r is run][:3], run
 
 
-def _load_workbooks(org: str):
+def _load_workbooks(records: list[dict]):
     """The client's latest kept books, in their original file order."""
     wbs, names = [], []
-    for i, f in enumerate(store.latest_files(org)):
+    for i, f in enumerate(records):
         suffix = Path(f["filename"]).suffix.lower() or ".xlsx"
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(f["body"])
@@ -369,8 +381,8 @@ def _load_workbooks(org: str):
     return wbs, names
 
 
-def _analyze(org: str, question: str, plan: Plan, ctx) -> Answer:
-    wbs, names = _load_workbooks(org)
+def _analyze(org: str, question: str, plan: Plan, ctx, records: list[dict]) -> Answer:
+    wbs, names = _load_workbooks(records)
     if not wbs:
         return Answer(
             mode="analyze", question=question, plan=plan,
@@ -386,7 +398,18 @@ def _analyze(org: str, question: str, plan: Plan, ctx) -> Answer:
     # send figures off this machine, so it runs on the client's standing
     # instruction — and the plan named it before the author approved.
     names_to_run = [m for m in plan.modules if m in MODULES]
-    blocks, ran = run_modules(names_to_run, wbs, tables, ctx, {})
+    import json
+    from ..pipeline.recur import diff
+    delta = {"changes": [], "alerts": [], "notes": []}
+    if "movements" in names_to_run:
+        with store.connect() as con:
+            for record in records:
+                snapshots = con.execute("SELECT seq,sha256,summary FROM ingestions WHERE org=? AND filename=? AND seq IN (?,?) ORDER BY seq", (org,record["filename"],record["seq"]-1,record["seq"])).fetchall()
+                if len(snapshots) == 2 and snapshots[-1]["sha256"] == record["sha256"]:
+                    changes = diff(json.loads(snapshots[0]["summary"]), json.loads(snapshots[1]["summary"]), ctx.alert_threshold_pct if ctx else 20)
+                    for key in delta:
+                        delta[key].extend(changes[key])
+    blocks, ran = run_modules(names_to_run, wbs, tables, ctx, {"delta":delta if any(delta.values()) else None})
     if not blocks:
         return Answer(
             mode="analyze", question=question, plan=plan,
@@ -400,7 +423,6 @@ def _analyze(org: str, question: str, plan: Plan, ctx) -> Answer:
     sources = [wb.source.model_dump(mode="json") for wb in wbs]
     # An answer is an analysis: it joins the timeline like any other run.
     store.put_run(org, ran, facts_of(blocks), blocks=dumped, sources=sources)
-    plan = plan.model_copy(update={"files": names})
     return Answer(mode="analyze", question=question, plan=plan,
                   blocks=dumped, sources=sources)
 
@@ -539,7 +561,9 @@ def ask(body: AskIn):
     if not body.execute:
         return Answer(mode="analyze", question=body.question,
                       plan=build_plan(body.question, ctx, body.org))
-    plan = body.plan or build_plan(body.question, ctx, body.org)
+    if body.plan is None:
+        raise HTTPException(409, "Review an analysis plan before running it.")
+    plan = body.plan
     unknown = [m for m in plan.modules if m not in MODULES]
     if unknown:
         raise HTTPException(422, f"Unknown module(s): {unknown}")
@@ -550,4 +574,17 @@ def ask(body: AskIn):
             422,
             "narrate is not enabled in this client's context; enable it there first.",
         )
-    return _analyze(body.org, body.question, plan, ctx)
+    if plan.context_version != getattr(ctx, "version", None):
+        raise HTTPException(409, "Client definitions changed. Review a new analysis plan.")
+    records = store.latest_files(body.org)
+    manifest = [PlannedFile(filename=f["filename"], seq=f["seq"], sha256=f["sha256"]) for f in records]
+    if plan.files != [f.filename for f in manifest] or plan.file_versions != manifest:
+        raise HTTPException(409, "Source workbooks changed. Review a new analysis plan.")
+    if set(plan.metrics) - set(ctx.metrics if ctx else {}):
+        raise HTTPException(422, "The plan names an undefined metric.")
+    if ctx and plan.metrics:
+        ctx = ctx.model_copy(deep=True)
+        ctx.metrics = {name: definition for name, definition in ctx.metrics.items() if name in plan.metrics}
+        ctx.ratios = {name: definition for name, definition in ctx.ratios.items()
+                      if {definition.numerator, definition.denominator} <= set(plan.metrics)}
+    return _analyze(body.org, body.question, plan, ctx, records)

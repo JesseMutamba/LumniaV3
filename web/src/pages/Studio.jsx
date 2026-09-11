@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import * as api from '../lib/api.js'
 import Block from '../blocks/index.jsx'
 import { t } from '../lib/format.js'
+import './analytics-workspace.css'
+const GeneralWorkspace = lazy(() => import('./GeneralWorkspace.jsx'))
+const FinancialWorkspace = lazy(() => import('./FinancialWorkspace.jsx'))
+const AnalyticsWorkspace = lazy(() => import('./AnalyticsWorkspace.jsx'))
 
 /**
  * Studio — the author's side of the platform.
@@ -12,9 +16,23 @@ import { t } from '../lib/format.js'
  * and hands you a URL to send.
  */
 export default function Studio({ locale, onPublished }) {
+  const initialExplore = new URLSearchParams(location.hash.split('?')[1] || '').get('workspace') !== 'operations'
+  const initialGeneral = !new URLSearchParams(location.hash.split('?')[1] || '').has('workspace') || new URLSearchParams(location.hash.split('?')[1] || '').get('workspace') === 'analysis'
+  const initialFinancial = new URLSearchParams(location.hash.split('?')[1] || '').get('workspace') === 'financial'
+  const [workspace, setWorkspace] = useState(initialGeneral ? 'analysis' : initialFinancial ? 'financial' : initialExplore ? 'explore' : 'operations')
+  const [generalOpened,setGeneralOpened] = useState(initialGeneral)
+  const [financialOpened,setFinancialOpened] = useState(initialFinancial)
+  const [exploreOpened, setExploreOpened] = useState(initialExplore)
+  useEffect(()=>{const sync=()=>{const mode=new URLSearchParams(location.hash.split('?')[1]||'').get('workspace');if(['analysis','financial','explore','operations'].includes(mode)){setWorkspace(mode);if(mode==='analysis')setGeneralOpened(true);if(mode==='financial')setFinancialOpened(true);if(mode==='explore')setExploreOpened(true)}};addEventListener('hashchange',sync);return()=>removeEventListener('hashchange',sync)},[])
   const [orgs, setOrgs] = useState([])
   const [token, setTok] = useState(api.getToken())
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState(0)
+  const busy = pending > 0
+  const contextRequest = useRef(0)
+  const usersRequest = useRef(0)
+  const timelineRequest = useRef(0)
+  const refreshRequest = useRef(0)
+  const [reports, setReports] = useState([])
   const [err, setErr] = useState(null)
   const [result, setResult] = useState(null)
   const [copied, setCopied] = useState(false)
@@ -31,7 +49,9 @@ export default function Studio({ locale, onPublished }) {
 
   useEffect(() => {
     setReads(null)
-    if (result) api.reportReads(result.id).then(setReads).catch(() => {})
+    let cancelled = false
+    if (result) api.reportReads(result.id).then(r => {if (!cancelled) setReads(r)}).catch(() => {})
+    return () => {cancelled = true}
   }, [result])
   const [newOrg, setNewOrg] = useState({ id: '', name: '', sub: '' })
 
@@ -40,20 +60,26 @@ export default function Studio({ locale, onPublished }) {
   const [timeline, setTimeline] = useState([])
   const [q, setQ] = useState('')
   const [qOrg, setQOrg] = useState('')
+  const activeOrg = useRef(qOrg)
+  activeOrg.current = qOrg
   const [qMode, setQMode] = useState('direct')
   const [answer, setAnswer] = useState(null)
   const [tiles, setTiles] = useState(null)
 
   const loadTiles = (org) => {
-    if (org) api.getTiles(org).then(setTiles).catch(() => setTiles(null))
+    if (org) api.getTiles(org).then(value => { if (activeOrg.current === org) setTiles(value) }).catch(() => { if (activeOrg.current === org) setTiles(null) })
   }
   // Changing client changes whose numbers these are: clear the answer with
   // the wall, or one client's figures sit on screen under another's name.
   useEffect(() => {
+    let cancelled = false
+    setReports([]); setResult(null); setReads(null)
+    if (qOrg) api.listReports(qOrg).then(r => {if (!cancelled) setReports(r)}).catch(e => {if (!cancelled) setErr(e.message)})
     setAnswer(null)
     setTiles(null)
     setInv(null)
     loadTiles(qOrg)
+    return () => {cancelled = true}
   }, [qOrg])
 
   async function pin(question) {
@@ -73,10 +99,11 @@ export default function Studio({ locale, onPublished }) {
     const org = qOrg || orgs[0]?.id
     if (!org) return
     const a = await run(() => api.ask({ org, question: q.trim(), mode: qMode }))
-    if (a) setAnswer(a)
+    if (a && activeOrg.current === org) setAnswer(a)
   }
 
   async function runPlan() {
+    const org = qOrg || orgs[0]?.id
     const a = await run(() =>
       api.ask({
         org: qOrg || orgs[0]?.id,
@@ -86,30 +113,34 @@ export default function Studio({ locale, onPublished }) {
         plan: answer.plan,
       })
     )
-    if (a) setAnswer(a)
+    if (a && activeOrg.current === org) setAnswer(a)
   }
 
   async function openTimeline(id) {
+    const request = ++timelineRequest.current
     if (tlOrg === id) {
       setTlOrg(null)
       return
     }
     setTlOrg(id)
     setTimeline([])
-    api.getTimeline(id).then(setTimeline).catch(() => {})
+    api.getTimeline(id).then(v => {if (request === timelineRequest.current) setTimeline(v)}).catch(e => {if (request === timelineRequest.current) setErr(e.message)})
   }
 
   const L = locale === 'fr'
   const refresh = () => {
+    const request = ++refreshRequest.current
     if (api.hasToken()) {
       api
         .listStudioOrgs()
         .then((os) => {
+          if (request !== refreshRequest.current) return
           setOrgs(os)
           setQOrg((cur) => cur || os[0]?.id || '')
         })
-        .catch(() => {})
-      api.getDashboard().then(setDash).catch(() => {})
+        .catch(e => {if (request === refreshRequest.current) {setOrgs([]);setErr(e.status === 401 ? 'Author token rejected. Forget the token and sign in again.' : e.message)}})
+      api.getDashboard().then(v => {if (request === refreshRequest.current) setDash(v)}).catch(() => {})
+      if (qOrg) api.listReports(qOrg).then(v => {if (request === refreshRequest.current && activeOrg.current === qOrg) setReports(v)}).catch(() => {})
     }
   }
   useEffect(() => { refresh() }, [token])
@@ -121,7 +152,7 @@ export default function Studio({ locale, onPublished }) {
   }
 
   async function run(fn) {
-    setBusy(true)
+    setPending(v => v + 1)
     setErr(null)
     try {
       return await fn()
@@ -129,7 +160,7 @@ export default function Studio({ locale, onPublished }) {
       setErr(e.detail ?? e.message)
       return null
     } finally {
-      setBusy(false)
+      setPending(v => Math.max(0, v - 1))
     }
   }
 
@@ -152,8 +183,9 @@ export default function Studio({ locale, onPublished }) {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
+    const selectedOrg = activeOrg.current
     const rep = await run(() => api.importReport(f))
-    if (rep) {
+    if (rep && selectedOrg === activeOrg.current) {
       setResult(rep)
       setCopied(false)
       refresh()
@@ -170,7 +202,7 @@ export default function Studio({ locale, onPublished }) {
     const org = qOrg || orgs[0]?.id
     if (!org) return
     const r = await run(() => api.ingestWorkbook(fs, org))
-    if (r) {
+    if (r && activeOrg.current === org) {
       setInv(r)
       loadTiles(org)
     }
@@ -187,12 +219,14 @@ export default function Studio({ locale, onPublished }) {
     return doc
   }
 
-  const loadUsers = (org) =>
-    api.listOrgUsers(org).then(setUsers).catch(() => setUsers([]))
+  const loadUsers = (org) => {
+    const request = ++usersRequest.current
+    return api.listOrgUsers(org).then(v => {if (request === usersRequest.current) setUsers(v)}).catch(e => {if (request === usersRequest.current) {setUsers([]);setErr(e.message)}})
+  }
 
   async function openUsers(o) {
     if (usersOrg === o.id) {
-      setUsersOrg(null)
+      usersRequest.current++; setUsersOrg(null)
       return
     }
     setUsersOrg(o.id)
@@ -244,13 +278,15 @@ export default function Studio({ locale, onPublished }) {
   }
 
   async function openContext(o) {
+    const request = ++contextRequest.current
     if (ctxOrg === o.id) {
       setCtxOrg(null)
       return
     }
     setCtxOrg(o.id)
-    setCtxErr(null)
+    setCtxErr(null); setCtxMeta(null); setCtxText('')
     const c = await run(() => api.getOrgContext(o.id))
+    if (request !== contextRequest.current) return
     setCtxMeta(c ? { version: c.version, updated_at: c.updated_at } : null)
     setCtxText(JSON.stringify(c ? editable(c) : CTX_TEMPLATE, null, 2))
   }
@@ -264,8 +300,9 @@ export default function Studio({ locale, onPublished }) {
       setCtxErr(L ? `JSON invalide : ${e.message}` : `Invalid JSON: ${e.message}`)
       return
     }
+    const request = contextRequest.current
     const c = await run(() => api.saveOrgContext(ctxOrg, body))
-    if (c) {
+    if (c && request === contextRequest.current) {
       setCtxMeta({ version: c.version, updated_at: c.updated_at })
       setCtxText(JSON.stringify(editable(c), null, 2))
     }
@@ -283,17 +320,26 @@ export default function Studio({ locale, onPublished }) {
   }
 
   async function rotate() {
+    const selectedOrg = activeOrg.current
     const rep = await run(() => api.rotateKey(result.id))
-    if (rep) {
+    if (rep && selectedOrg === activeOrg.current) {
       setResult(rep)
       setCopied(false)
     }
   }
 
-  function copy() {
-    navigator.clipboard.writeText(api.shareUrl(result))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  async function copy() {
+    try {await navigator.clipboard.writeText(api.shareUrl(result));setCopied(true);setTimeout(() => setCopied(false), 2000)} catch {setErr('Could not copy automatically. Select and copy the link.')}
+  }
+  async function saveGeneratedDraft() {
+    const selectedOrg = activeOrg.current
+    const rep = await run(() => api.saveDraftReport(inv.draft))
+    if (rep && selectedOrg === activeOrg.current) {setResult(rep);refresh()}
+  }
+  async function changeStatus(status) {
+    const selectedOrg = activeOrg.current
+    const rep = await run(() => api.setStatus(result.id, status))
+    if (rep && selectedOrg === activeOrg.current) {setResult(rep);setCopied(false);refresh();onPublished?.()}
   }
 
   if (!api.hasToken())
@@ -316,7 +362,7 @@ export default function Studio({ locale, onPublished }) {
     )
 
   return (
-    <div className="studio">
+    <div className={`studio${workspace !== 'operations' ? ' studio-expanded' : ''}`}>
       <div className="studio-h">
         <h2>Studio</h2>
         <button className="link" onClick={() => saveToken('')}>
@@ -324,6 +370,19 @@ export default function Studio({ locale, onPublished }) {
         </button>
       </div>
 
+      <div className="studio-switch" role="tablist" aria-label={L ? 'Espace de travail' : 'Workspace'}>
+        <button id="studio-analysis-tab" role="tab" aria-controls="studio-analysis-panel" aria-selected={workspace === 'analysis'} onClick={() => {setGeneralOpened(true);setWorkspace('analysis')}}>{L ? 'Préparation et analyse' : 'Prepare & analyze'}</button>
+        <button id="studio-operations-tab" role="tab" aria-controls="studio-operations-panel" aria-selected={workspace === 'operations'} onClick={() => setWorkspace('operations')}>{L ? 'Rapports et opérations' : 'Reports & operations'}</button>
+        <button id="studio-explore-tab" role="tab" aria-controls="studio-explore-panel" aria-selected={workspace === 'explore'} onClick={() => { setExploreOpened(true); setWorkspace('explore') }}>{L ? 'Studio analytique' : 'Analytics Studio'}</button>
+        <button id="studio-financial-tab" role="tab" aria-controls="studio-financial-panel" aria-selected={workspace === 'financial'} onClick={() => {setFinancialOpened(true);setWorkspace('financial')}}>{L ? 'Revue financière' : 'Financial review'}</button>
+      </div>
+      <div id="studio-analysis-panel" role="tabpanel" aria-labelledby="studio-analysis-tab" hidden={workspace !== 'analysis'}>{generalOpened && <Suspense fallback={<p>Opening analytics studio…</p>}><GeneralWorkspace orgs={orgs}/></Suspense>}</div>
+      <div id="studio-financial-panel" role="tabpanel" aria-labelledby="studio-financial-tab" hidden={workspace !== 'financial'}>{financialOpened && <Suspense fallback={<p>Preparing financial workspace…</p>}><FinancialWorkspace orgs={orgs} locale={locale}/></Suspense>}</div>
+      {err && workspace === 'explore' && <div className="err-panel" role="alert">{typeof err === 'string' ? err : JSON.stringify(err)}</div>}
+      <div id="studio-explore-panel" role="tabpanel" aria-labelledby="studio-explore-tab" hidden={workspace !== 'explore'}>
+        {exploreOpened && <Suspense fallback={<div role="status">{L ? 'Ouverture…' : 'Opening workspace…'}</div>}><AnalyticsWorkspace orgs={orgs} locale={locale} onOperations={() => {setWorkspace('operations');refresh()}} /></Suspense>}
+      </div>
+      <div id="studio-operations-panel" className="studio-operations" role="tabpanel" aria-labelledby="studio-operations-tab" hidden={workspace !== 'operations'}>
       {/* --------------------------------------------------------- overview */}
       {dash.length > 0 && (
         <section className="panel">
@@ -422,7 +481,7 @@ export default function Studio({ locale, onPublished }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <select value={qOrg} onChange={(e) => setQOrg(e.target.value)}>
+          <select disabled={busy} value={qOrg} onChange={(e) => setQOrg(e.target.value)}>
             {orgs.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name}
@@ -549,7 +608,7 @@ export default function Studio({ locale, onPublished }) {
             : 'Drop one or several workbooks (.xlsx) — budget and actuals side by side. The machine detects the tables, runs the context’s modules, and writes a draft in which every value carries its source cell and file.'}
         </p>
         <label className="drop">
-          <input type="file" accept=".xlsx,.xlsm" multiple onChange={analyse} hidden />
+          <input type="file" accept=".xlsx,.xlsm,.csv,.tsv" multiple onChange={analyse} hidden />
           {busy
             ? L ? 'Analyse…' : 'Analysing…'
             : L ? 'Choisir un ou des classeurs .xlsx' : 'Choose .xlsx workbook(s)'}
@@ -565,6 +624,10 @@ export default function Studio({ locale, onPublished }) {
         )}
         {inv && (
           <div className="det">
+            <details className="studio-quality" open={inv.needs_review}>
+              <summary>{inv.needs_review ? (L ? 'Vérifications nécessitant une relecture' : 'Checks requiring review') : (L ? 'Vérifications des données' : 'Data checks')}</summary>
+              {(inv.checks || []).map((check, i) => <div key={i} className={check.passed ? 'note' : 'aw-warning'}><strong>{check.passed ? (L ? 'Réussi' : 'Passed') : (L ? 'À vérifier' : 'Review')} · {check.name}</strong><p>{check.detail}</p></div>)}
+            </details>
             {inv.tables.map((t, i) => (
               <div className="det-row" key={i}>
                 <span className="det-loc">
@@ -635,13 +698,14 @@ export default function Studio({ locale, onPublished }) {
             )}
             {inv.draft && (
               <>
-                <button className="drop det-dl" onClick={downloadDraft}>
+                <button className="drop det-dl" disabled={busy} onClick={saveGeneratedDraft}>{L ? 'Enregistrer et vérifier le brouillon' : 'Save & review draft'}</button>
+                <button className="link" onClick={downloadDraft}>
                   {L ? 'télécharger le brouillon .json' : 'download the draft .json'}
                 </button>
                 <p className="fine">
                   {L
-                    ? 'Relisez le brouillon — intitulés, unités, lignes — puis publiez-le au panneau 03.'
-                    : 'Review the draft — labels, units, rows — then publish it in panel 03.'}
+                    ? 'Enregistrez le brouillon, ouvrez son aperçu, puis publiez-le après vérification.'
+                    : 'Save the draft, open its preview, then publish after reviewing labels, units and source cells.'}
                 </p>
               </>
             )}
@@ -649,6 +713,7 @@ export default function Studio({ locale, onPublished }) {
         )}
       </section>
 
+      <section className="panel"><div className="panel-h">{L ? 'Bibliothèque des rapports' : 'Report library'}</div><p className="fine">{L ? 'Rapports du client sélectionné ci-dessus.' : 'Reports for the client selected above.'}</p>{reports.length ? reports.map(r => <div className="dash-row" key={r.id}><span>{t(r.title,locale)}</span><span className="mono">{r.status}</span><button className="link" disabled={busy} onClick={async () => {const selectedOrg=activeOrg.current;const rep=await run(() => api.getReportAsAuthor(r.id));if(rep && selectedOrg===activeOrg.current)setResult(rep)}}>{L ? 'Vérifier et partager' : 'Review & share'}</button></div>) : <p className="fine">{L ? 'Aucun rapport enregistré.' : 'No saved reports for this client.'}</p>}</section>
       {/* ---------------------------------------------------------- publish */}
       <section className="panel">
         <div className="panel-h">
@@ -698,12 +763,13 @@ export default function Studio({ locale, onPublished }) {
       {/* ------------------------------------------------------------ share */}
       {result && (
         <section className="panel ok">
-          <div className="panel-h">{L ? '04 · Lien à partager' : '04 · Share link'}</div>
+          <div className="panel-h">{L ? '04 · Vérification et partage' : '04 · Review & share'}</div>
           <div className="pub-title">
-            {t(result.title, locale)} · {t(result.period.label, locale)} ·{' '}
+            {orgs.find(o => o.id === result.org)?.name || result.org} · {t(result.title, locale)} · {t(result.period.label, locale)} ·{' '}
             <span className="mono">{result.status}</span>
           </div>
-          <div className="share">
+          <a className="link" href={`#/a/${result.id}`} target="_blank" rel="noreferrer">{L ? 'Ouvrir l’aperçu auteur' : 'Open author preview'}</a>
+          {result.status === 'published' && <><div className="share">
             <code>{api.shareUrl(result)}</code>
             <button onClick={copy}>{copied ? (L ? 'copié' : 'copied') : L ? 'copier' : 'copy'}</button>
           </div>
@@ -712,6 +778,8 @@ export default function Studio({ locale, onPublished }) {
               ? "Quiconque a ce lien peut lire ce rapport et rien d'autre. Aucun compte requis."
               : 'Anyone with this link can read this one report and nothing else. No account required.'}
           </p>
+          </>}
+          {result.status !== 'published' && <p className="fine">{L ? 'Ce rapport est privé. Publiez-le pour activer son lien lecteur.' : 'This report is private. Publish it to activate the reader link.'}</p>}
           {reads && (
             <div className="reads">
               {reads.reads} {L ? 'lecture(s)' : 'read(s)'} · {reads.readers}{' '}
@@ -735,14 +803,15 @@ export default function Studio({ locale, onPublished }) {
             </button>
             <button
               className="link"
-              onClick={() => run(() => api.setStatus(result.id, 'retracted')).then(refresh)}
+              disabled={busy} onClick={() => changeStatus(result.status === 'published' ? 'retracted' : 'published')}
             >
-              {L ? 'retirer le rapport' : 'retract report'}
+              {result.status === 'published' ? (L ? 'Retirer le rapport' : 'Retract report') : (L ? 'Publier le rapport' : 'Publish report')}
             </button>
           </div>
         </section>
       )}
 
+      <section className="panel"><div className="panel-h">{L ? 'Conservation des fichiers' : 'Workbook retention'}</div><p>{L ? 'Supprimez les copies des classeurs conservées pour le client sélectionné. Les rapports, les tableaux sauvegardés et les historiques restent disponibles.' : 'Delete retained workbook copies for the selected client. Reports, saved dashboards and analysis history remain available.'}</p><button className="link" disabled={busy || !qOrg} onClick={async () => {if(!confirm(L ? 'Supprimer les copies conservées de ce client ?' : 'Delete retained workbook copies for this client?'))return;const ok=await run(() => api.forgetWorkbooks(qOrg));if(ok){setAnswer(null);refresh()}}}>{L ? 'Supprimer les classeurs conservés' : 'Delete retained workbook copies'}</button></section>
       {/* ----------------------------------------------------------- clients */}
       <section className="panel">
         <div className="panel-h">{L ? '05 · Clients' : '05 · Clients'}</div>
@@ -934,6 +1003,7 @@ export default function Studio({ locale, onPublished }) {
           </button>
         </form>
       </section>
+      </div>
     </div>
   )
 }

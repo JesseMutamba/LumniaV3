@@ -8,9 +8,9 @@
 const BASE = import.meta.env.VITE_API || '/v1'
 const TOKEN_KEY = 'lumnia.token'
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY) || ''
-export const setToken = (t) =>
-  t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY)
+let memoryToken = ''
+export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || memoryToken } catch { return memoryToken } }
+export const setToken = token => { memoryToken = token || ''; try { token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY) } catch {} }
 export const hasToken = () => !!getToken()
 
 async function req(path, { method = 'GET', body, auth = false, raw = false } = {}) {
@@ -41,8 +41,8 @@ async function req(path, { method = 'GET', body, auth = false, raw = false } = {
 
 /* -------------------------------------------------------------- reading */
 export const health = () => req('/health')
-export const listOrgs = () => req('/orgs')
-export const listReports = (orgId) => req(`/orgs/${orgId}/reports`)
+export const listOrgs = () => req('/orgs', {auth:true})
+export const listReports = (orgId) => req(`/studio/orgs/${encodeURIComponent(orgId)}/reports`, {auth:true})
 export const getReport = (id, key) => req(`/reports/${id}?k=${encodeURIComponent(key || '')}`)
 export const getPortal = (orgId, key) =>
   req(`/portal/${orgId}?k=${encodeURIComponent(key || '')}`)
@@ -54,6 +54,13 @@ export const getDashboard = () => req('/studio/dashboard', { auth: true })
 export const getTimeline = (id) => req(`/studio/orgs/${id}/timeline`, { auth: true })
 export const ask = (body) => req('/studio/ask', { method: 'POST', body, auth: true })
 export const getTiles = (id) => req(`/studio/orgs/${id}/tiles`, { auth: true })
+const analysisPath = (org) => `/studio/orgs/${encodeURIComponent(org)}/analytics/dashboards`
+export const listAnalysisDashboards = (org) => req(analysisPath(org), { auth: true })
+export const openAnalysisDashboard = (org, id) => req(`${analysisPath(org)}/${encodeURIComponent(id)}`, { auth: true })
+export const saveAnalysisDashboard = (org, body, id) => req(
+  id ? `${analysisPath(org)}/${encodeURIComponent(id)}` : analysisPath(org),
+  { method: id ? 'PUT' : 'POST', body, auth: true },
+)
 export const addTile = (id, question) =>
   req(`/studio/orgs/${id}/tiles`, { method: 'POST', body: { question }, auth: true })
 export const removeTile = (id, tileId) =>
@@ -105,29 +112,50 @@ export const portalUrl = (org) =>
    A client session is a different principal from the author token: separate
    storage key, separate header, and it must never be sent to /studio. */
 const SESSION_KEY = 'lumnia.session'
+let memorySession = null
+let memorySessionOnly = false
+
+const validSession = s => Boolean(
+  s && typeof s.token === 'string' && s.token.trim() &&
+  typeof s.user?.username === 'string' && s.user.username.trim() &&
+  typeof s.org?.id === 'string' && s.org.id.trim() &&
+  typeof s.expires_at === 'number' && Number.isFinite(s.expires_at) &&
+  s.expires_at * 1000 > Date.now()
+)
 
 export const getSession = () => {
+  if (memorySessionOnly) return validSession(memorySession) ? memorySession : null
+  let raw
   try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
-    const s = JSON.parse(raw)
-    // Expiry is checked here so a stale tab shows the sign-in form rather
-    // than a list of reports that all 401 when clicked.
-    if (!s?.token || (s.expires_at ?? 0) * 1000 < Date.now()) return null
-    return s
+    raw = localStorage.getItem(SESSION_KEY)
   } catch {
-    return null
+    return validSession(memorySession) ? memorySession : null
   }
+  // A readable but empty storage key means another tab signed out. Only
+  // unavailable storage may fall back to an in-memory session.
+  try { memorySession = raw ? JSON.parse(raw) : null } catch { memorySession = null }
+  if (!validSession(memorySession)) memorySession = null
+  return memorySession
 }
 
 export const setSession = (s) => {
+  memorySession = s
   try {
     if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s))
     else localStorage.removeItem(SESSION_KEY)
+    memorySessionOnly = false
   } catch {
     // private browsing: the session lives for this page load only
+    memorySessionOnly = true
   }
 }
+
+// The production portal stores the organization on session.org. Older Studio
+// accounts also carry user.org; when present it must agree with that scope.
+export const sessionBelongsToOrg = (session, org) => Boolean(
+  session?.token && session.org?.id === org &&
+  (session.user?.org == null || session.user.org === org)
+)
 
 const sessionHeaders = () => {
   const s = getSession()
@@ -137,6 +165,13 @@ const sessionHeaders = () => {
 export const login = (username, password) =>
   req('/auth/login', { method: 'POST', body: { username, password } })
 
+// Accept the captured session so explicit sign-out may clear browser state
+// immediately while this request revokes the same server session.
+export const logout = (session = getSession()) => {
+  if (typeof session?.token !== 'string' || !session.token.trim()) return Promise.resolve(null)
+  return reqAs('/auth/logout', { Authorization: `Bearer ${session.token}` }, { method: 'POST', credentials: 'omit' })
+}
+
 export const whoami = () => reqAs('/auth/me', sessionHeaders())
 export const myReports = () => reqAs('/me/reports', sessionHeaders())
 
@@ -144,8 +179,9 @@ export const myReports = () => reqAs('/me/reports', sessionHeaders())
  *  browser history, the session says who they are. */
 export const getMyReport = (id) => reqAs(`/reports/${id}`, sessionHeaders())
 
-async function reqAs(path, headers) {
-  const r = await fetch(`${BASE}${path}`, { headers })
+async function reqAs(path, headers, options = {}) {
+  const r = await fetch(`${BASE}${path}`, { ...options, headers })
+  if (r.status === 204) return null
   const text = await r.text()
   let data
   try {
@@ -172,3 +208,6 @@ export const setUserDisabled = (username, disabled) =>
   req(`/studio/users/${username}/disable?disabled=${disabled}`, { method: 'POST', auth: true })
 export const deleteUser = (username) =>
   req(`/studio/users/${username}`, { method: 'DELETE', auth: true })
+
+export const saveDraftReport = rep => req(`/orgs/${encodeURIComponent(rep.org)}/reports`, {method:"POST", body:{...rep,status:"draft"},auth:true})
+export const forgetWorkbooks = org => req(`/studio/orgs/${encodeURIComponent(org)}/files`, {method:"DELETE",auth:true})

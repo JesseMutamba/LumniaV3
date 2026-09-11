@@ -56,6 +56,95 @@ class Module:
 # movements — the recurring-ingestion delta, as a named product
 # --------------------------------------------------------------------------
 
+def _filtered_inputs(wbs, tables, ctx):
+    from dataclasses import replace
+    ignored = {_norm(x) for x in (ctx.ignore_sheets if ctx else [])}
+    excluded = {_norm(x) for x in (ctx.exclude_labels if ctx else [])}
+    cleaned = []
+    for wb in wbs:
+        sheets = {}
+        for name, sheet in wb.sheets.items():
+            if _norm(name) in ignored:
+                continue
+            grid = [([None] * len(row) if any(isinstance(v, str) and _norm(v) in excluded for v in row) else list(row)) for row in sheet.grid]
+            sheets[name] = replace(sheet, grid=grid)
+        cleaned.append(replace(wb, sheets=sheets))
+    return cleaned, [(idx, t) for idx, t in tables if t.sheet in cleaned[idx].sheets]
+
+
+
+def _month_identity(value):
+    from datetime import date, datetime
+    import re, unicodedata
+    if isinstance(value, (date, datetime)):
+        return value.month - 1, value.year
+    if not isinstance(value, str):
+        return None
+    text = ''.join(c for c in unicodedata.normalize('NFD', value.strip().lower()) if unicodedata.category(c) != 'Mn')
+    iso = re.fullmatch(r'(20\d{2})[-/](0?[1-9]|1[0-2])(?:[-/]\d{1,2})?', text)
+    if iso:
+        return int(iso[2]) - 1, int(iso[1])
+    prefixes = ('jan', 'feb|fev', 'mar', 'apr|avr', 'may|mai', 'jun|juin', 'jul|juil', 'aug|aou', 'sep', 'oct', 'nov', 'dec')
+    for month, prefix in enumerate(prefixes):
+        if re.match(r'^(?:' + prefix + r')[a-z]*\.?\s*(?:[-/]?\s*(?:20\d{2}|\d{2}))?$', text):
+            year = re.search(r'20\d{2}', text)
+            return month, int(year[0]) if year else None
+    return None
+
+
+
+def _calendar_header(sheet, before_row):
+    """Nearest usable month header before the selected measure, not the first
+    numeric cell. A repeated month in one header is ambiguous and rejected."""
+    import re
+    for rowno in range(before_row - 1, 0, -1):
+        row = sheet.grid[rowno - 1]
+        identified = [(ci + 1, _month_identity(v)) for ci, v in enumerate(row)]
+        identified = [(ci, period) for ci, period in identified if period is not None]
+        if len(identified) < 2:
+            continue
+        months = [period[0] for _, period in identified]
+        if len(months) != len(set(months)):
+            return None
+        # Use a nearby explicit year only when it is unambiguous. Never
+        # rewrite conflicting dates: alignment emits a visible review flag.
+        year = None
+        for title_row in reversed(sheet.grid[max(0, rowno - 4):rowno]):
+            years = {int(y) for v in title_row if v is not None for y in re.findall(r'\b20\d{2}\b', str(v))}
+            if len(years) == 1:
+                year = next(iter(years)); break
+        return {month: (column, explicit_year or year) for column, (month, explicit_year) in identified}
+    return None
+
+
+
+def _alignment_subset(al, months):
+    months = sorted(set(months) & set(al['amap']) & set(al['bmap']))
+    if not months:
+        return None
+    result = dict(al)
+    result.update(months=months, n=len(months),
+                  sum_a=sum(al['amap'][m][1] for m in months),
+                  sum_b=sum(al['bmap'][m][1] for m in months))
+    for prefix in ('a', 'b'):
+        cells = [al[prefix + 'map'][m][0] for m in months]
+        result[prefix + '_src'] = Src(file=al[prefix + 'wb'].source.idx,
+                                     sheet=al[prefix + 'sheet'],
+                                     cells=a1_range(al[prefix + 'row'], min(cells), al[prefix + 'row'], max(cells)))
+    return result
+
+
+
+def _period_review(al, name):
+    if not al.get('year_mismatch'):
+        return []
+    return [Flag(severity='blocked', tag=Text(fr='Périodes à vérifier', en='Periods require review'),
+                 title=Text(fr=f'{name} : années différentes', en=f'{name}: source years differ'),
+                 body=Text(fr=f"Budget {al['budget_years']} ; réel {al['actual_years']}. La comparaison ci-dessous utilise les mois explicitement associés par la définition client et reste non vérifiée jusqu’à correction des dates.",
+                           en=f"Budget {al['budget_years']}; actual {al['actual_years']}. The comparison below uses the months explicitly paired by the client definition and is unverified until the source years are reconciled."))]
+
+
+
 def _run_movements(wbs: list[Workbook], tables, ctx, extras) -> list:
     delta = extras.get("delta")
     if not delta or not delta.get("alerts"):
@@ -181,146 +270,103 @@ def _run_execution(wbs: list[Workbook], tables, ctx, extras) -> list:
 # reconciliation — the same money recorded twice across cash journals
 # --------------------------------------------------------------------------
 
-def _date_amount_rows(wb: Workbook, t: DetectedTable) -> list[tuple]:
-    """(date, amount, row) for tables that look like cash journals: a date
-    column and at least one numeric column."""
-    sheet = wb[t.sheet]
-    date_col = None
-    for c_idx in range(1, max((len(r) for r in sheet.grid), default=0) + 1):
-        vals = [sheet.cell(r, c_idx) for r in range(t.first_row, t.last_row + 1)]
-        dates = [v for v in vals if isinstance(v, (datetime, date))]
-        if len(dates) >= max(3, (t.last_row - t.first_row + 1) // 2):
-            date_col = c_idx
-            break
+def _date_amount_rows(wb, t, ctx=None):
+    """Outgoing payments (or explicit amount columns), not balances, receipts,
+    identifiers or mixed currencies. Each returned row is only a candidate."""
+    from datetime import date, datetime
+    import unicodedata
+    def norm(s):
+        return ''.join(c for c in unicodedata.normalize('NFD',_norm(s)) if unicodedata.category(c)!='Mn')
+    sheet=wb[t.sheet]
+    date_col=next((c for c in range(1,max((len(r) for r in sheet.grid),default=0)+1)
+                   if sum(isinstance(sheet.cell(r,c),(date,datetime)) for r in range(t.first_row,t.last_row+1))>=1),None)
     if date_col is None:
         return []
-    num_cols = [c for c in t.columns if c.kind == "number"]
-    out = []
-    for r in range(t.first_row, t.last_row + 1):
-        d = sheet.cell(r, date_col)
-        if not isinstance(d, (datetime, date)):
+    cols=[]
+    for col in t.columns:
+        label=norm(col.label)
+        unit=_unit_for(col.label,ctx)
+        if col.kind!='number' or unit not in ('USD','CDF') or any(s in label for s in ('solde','balance','code','piece','reference','entree','receipt','inflow')):
             continue
-        day = d.date() if isinstance(d, datetime) else d
-        for c in num_cols:
-            v = sheet.cell(r, c.index)
-            if _is_num(v) and abs(float(v)) >= 1:
-                out.append((day, round(float(v), 2), r, c.index, t.sheet))
+        if not any(s in label for s in ('sortie','payment','outflow','depense','montant','amount','paid')):
+            continue
+        cols.append((col.index,unit))
+    out=[]
+    for r in range(t.first_row,t.last_row+1):
+        day=sheet.cell(r,date_col)
+        if not isinstance(day,(date,datetime)):
+            continue
+        day=day.date() if isinstance(day,datetime) else day
+        for col,unit in cols:
+            amount=sheet.cell(r,col)
+            if _is_num(amount) and amount!=0:
+                out.append((day,round(float(amount),2),unit,r,col,t.sheet))
     return out
 
 
-def _run_reconciliation(wbs: list[Workbook], tables, ctx, extras) -> list:
-    """Match rows across journal tables on (date, amount). The same money
-    recorded in two journals is the classic double-count; here it becomes a
-    table the author can take to finance, every line pointing at both cells.
 
-    Which sheets are journals is the client's knowledge, not the module's
-    guess: context.reconcile_sheets names them. Left empty, every detected
-    table with dates is considered — noisier, but nothing is hidden."""
-    wanted = {_norm(s) for s in (ctx.reconcile_sheets if ctx else [])}
-    pool = [(idx, t) for idx, t in tables if not wanted or _norm(t.sheet) in wanted]
-    journals = [(idx, t, _date_amount_rows(wbs[idx], t)) for idx, t in pool]
-    journals = [(idx, t, rows) for idx, t, rows in journals if rows]
-    if len(journals) < 2:
-        return []
-    matches: list[dict] = []
-    seen: set = set()
-    for i in range(len(journals)):
-        for j in range(i + 1, len(journals)):
-            f1, t1, rows1 = journals[i]
-            f2, t2, rows2 = journals[j]
-            if f1 == f2 and t1.sheet == t2.sheet:
+def _run_reconciliation(wbs,tables,ctx,extras):
+    from collections import defaultdict,deque
+    wanted={_norm(s) for s in (ctx.reconcile_sheets if ctx else [])}
+    journals=[(idx,t,_date_amount_rows(wbs[idx],t,ctx)) for idx,t in tables if not wanted or _norm(t.sheet) in wanted]
+    matches=[]
+    for i,(fa,ta,a) in enumerate(journals):
+        for fb,tb,b in journals[i+1:]:
+            if fa==fb and ta.sheet==tb.sheet:
                 continue
-            index = {}
-            for day, amt, r, c, sh in rows1:
-                index.setdefault((day, amt), []).append((r, c, sh))
-            for day, amt, r2, c2, sh2 in rows2:
-                hits = index.get((day, amt))
-                if not hits:
+            pool=defaultdict(deque)
+            for day,amt,unit,row,col,sh in a:
+                pool[(day,amt,unit)].append((row,col,sh))
+            for day,amt,unit,row,col,sh in b:
+                q=pool[(day,amt,unit)]
+                if not q:
                     continue
-                key = (day, amt, sh2)
-                if key in seen:
-                    continue
-                seen.add(key)
-                r1, c1, sh1 = hits[0]
-                matches.append(
-                    {"day": day, "amt": amt,
-                     "a": (f1, sh1, r1, c1), "b": (f2, sh2, r2, c2)}
-                )
+                ra,ca,sha=q.popleft()
+                matches.append((day,amt,unit,(fa,sha,ra,ca),(fb,sh,row,col)))
     if not matches:
         return []
-    total = sum(m["amt"] for m in matches)
-    rows = []
-    for m in matches[:MAX_RECON_ROWS]:
-        fa, sha, ra, ca = m["a"]
-        fb, shb, rb, cb = m["b"]
-        rows.append(
-            {
-                "date": str(m["day"]),
-                "amount": Value(
-                    n=m["amt"], unit="none",
-                    src=Src(file=wbs[fa].source.idx, sheet=sha, cells=a1(ra, ca)),
-                ),
-                "also": f"{shb}!{a1(rb, cb)}",
-            }
-        )
-    blocks: list = [
-        Flag(
-            severity="warn",
-            tag=Text(fr="Rapprochement", en="Reconciliation"),
-            title=Text(
-                fr=f"{len(matches)} écriture(s) présentes dans deux journaux — {total:,.0f} au total".replace(",", " "),
-                en=f"{len(matches)} entries present in two journals — {total:,.0f} in total".replace(",", " "),
-            ),
-            body=Text(
-                fr="Même date, même montant, deux journaux : le même argent compté deux fois tant qu'aucune clé de rapprochement n'existe. La somme des journaux surestime la dépense réelle.",
-                en="Same date, same amount, two journals: the same money counted twice until a reconciliation key exists. Summing the journals overstates real spend.",
-            ),
-        ),
-        Table(
-            columns=[
-                {"key": "date", "label": Text(fr="Date", en="Date"), "align": "left"},
-                {"key": "amount", "label": Text(fr="Montant", en="Amount"), "align": "right"},
-                {"key": "also", "label": Text(fr="Aussi dans", en="Also in"), "align": "right"},
-            ],
-            rows=rows,
-        ),
-    ]
-    return blocks
+    totals=defaultdict(float)
+    for _,amt,unit,_,_ in matches:
+        totals[unit]+=amt
+    total_text=' + '.join(f'{v:,.0f} {u}'.replace(',',' ') for u,v in sorted(totals.items()))
+    rows=[]
+    for day,amt,unit,(fa,sha,ra,ca),(fb,shb,rb,cb) in matches[:MAX_RECON_ROWS]:
+        rows.append({'date':str(day),'amount':Value(n=amt,unit=unit,src=Src(file=wbs[fa].source.idx,sheet=sha,cells=a1(ra,ca))),
+                     'also':f'{wbs[fb].source.filename} · {shb}!{a1(rb,cb)}'})
+    return [Flag(severity='warn',tag=Text(fr='Rapprochement',en='Reconciliation'),
+                 title=Text(fr=f'{len(matches)} écriture(s) candidates dans deux journaux — {total_text}',en=f'{len(matches)} candidate entries across two journals — {total_text}'),
+                 body=Text(fr='Même date, même montant signé et même devise. Ces correspondances sont des pistes de rapprochement, pas des doublons confirmés. Vérifiez les références avant toute exclusion ; aucun montant n’est déduit.',en='Same date, signed amount and currency. These are reconciliation candidates, not confirmed duplicate payments. Verify transaction references before excluding an entry; nothing is deducted.')),
+            Table(columns=[{'key':'date','label':Text(fr='Date',en='Date'),'align':'left'},
+                           {'key':'amount','label':Text(fr='Montant',en='Amount'),'align':'right'},
+                           {'key':'also','label':Text(fr='Aussi dans',en='Also in'),'align':'left'}],rows=rows)]
+
 
 
 # --------------------------------------------------------------------------
 # budget-vs-actual — the phased comparison, across files
 # --------------------------------------------------------------------------
 
-def _find_series(wbs: list[Workbook], sd: SeriesDef):
-    """Locate the row the context describes: (workbook, sheet name, row,
-    [(col, value), ...]). Numeric cells left to right; leading cells dropped
-    per `skip`; an annual-total column (first ≈ sum of the rest) is dropped
-    automatically.
-
-    A label that matches a row exactly wins over one that merely appears
-    inside it. Real sheets carry « CPO » and « CPO 2025 » ten rows apart,
-    and the looser match would silently answer with the wrong year."""
-    loose = None
+def _find_series(wbs, sd):
+    """Keep original cell positions. Calendar headers, not coincidental
+    numeric equality, decide which cells are months and which are totals."""
+    exact, loose = [], []
     for wb in wbs:
         for name, sheet in wb.sheets.items():
             if _norm(name) != _norm(sd.sheet):
                 continue
-            for r in range(1, sheet.rows + 1):
-                row = sheet.grid[r - 1] or []
-                labels = [_norm(c) for c in row[:4] if isinstance(c, str)]
-                if not any(_norm(sd.label) in c for c in labels):
+            for r, row in enumerate(sheet.grid, 1):
+                labels = [_norm(v) for v in row[:4] if isinstance(v, str)]
+                if not any(_norm(sd.label) in label for label in labels):
                     continue
-                cells = [
-                    (ci + 1, float(v)) for ci, v in enumerate(row) if _is_num(v)
-                ]
-                cells = _trim_totals(cells[sd.skip:])
+                cells = [(ci + 1, float(v)) for ci, v in enumerate(row) if _is_num(v)][sd.skip:]
                 if not cells:
                     continue
-                if any(c == _norm(sd.label) for c in labels):
-                    return wb, name, r, cells
-                loose = loose or (wb, name, r, cells)
-    return loose
+                target = exact if _norm(sd.label) in labels else loose
+                target.append((wb, name, r, cells))
+    matches = exact or loose
+    # An ambiguous same-named measure must not silently select a workbook.
+    return matches[0] if matches else None
+
 
 
 def _trim_totals(cells: list[tuple[int, float]]) -> list[tuple[int, float]]:
@@ -349,38 +395,32 @@ def _trim_totals(cells: list[tuple[int, float]]) -> list[tuple[int, float]]:
     return cells
 
 
-def _aligned(wbs: list[Workbook], mdef):
-    """Both sides of a metric, summed over the months the actuals reach.
+def _aligned(wbs, mdef):
+    b, a = _find_series(wbs, mdef.budget), _find_series(wbs, mdef.actual)
+    if not b or not a:
+        return None
+    bwb, bsheet, brow, bcells = b
+    awb, asheet, arow, acells = a
+    bh = _calendar_header(bwb[bsheet], brow)
+    ah = _calendar_header(awb[asheet], arow)
+    if not bh or not ah:
+        return None
+    bv, av = dict(bcells), dict(acells)
+    bmap = {m: (c, bv[c]) for m, (c, _) in bh.items() if c in bv}
+    amap = {m: (c, av[c]) for m, (c, _) in ah.items() if c in av}
+    common = sorted(set(amap) & set(bmap))
+    if not common:
+        return None
+    mismatch = [m for m in common if ah[m][1] and bh[m][1] and ah[m][1] != bh[m][1]]
+    out = dict(amap=amap, bmap=bmap, awb=awb, asheet=asheet, arow=arow,
+               bwb=bwb, bsheet=bsheet, brow=brow, months=common,
+               chart_months=sorted(set(ah) | set(bh)),
+               year_mismatch=mismatch,
+               actual_years=sorted({y for _, y in ah.values() if y}),
+               budget_years=sorted({y for _, y in bh.values() if y}),
+               missing_months=sorted((set(ah) | set(bh)) - set(common)))
+    return _alignment_subset(out, common)
 
-    Alignment is by month position, never by sequence: a month with no
-    figure leaves a blank cell, and pairing what survives in order would
-    compare March against February. One implementation, used by every
-    module that compares a plan to a reality."""
-    found_b = _find_series(wbs, mdef.budget)
-    found_a = _find_series(wbs, mdef.actual)
-    if not found_b or not found_a:
-        return None
-    bwb, bsheet, brow, bcells = found_b
-    awb, asheet, arow, acells = found_a
-    bmap = {c - bcells[0][0]: (c, v) for c, v in bcells}
-    amap = {c - acells[0][0]: (c, v) for c, v in acells}
-    n = min(max(amap) + 1, max(bmap) + 1)
-    a_in = [(c, v) for off, (c, v) in sorted(amap.items()) if off < n]
-    b_in = [(c, v) for off, (c, v) in sorted(bmap.items()) if off < n]
-    if not a_in or not b_in:
-        return None
-    return {
-        "n": n,
-        "sum_a": sum(v for _, v in a_in),
-        "sum_b": sum(v for _, v in b_in),
-        "amap": amap, "bmap": bmap,
-        "awb": awb, "asheet": asheet, "arow": arow,
-        "bwb": bwb, "bsheet": bsheet, "brow": brow,
-        "a_src": Src(file=awb.source.idx, sheet=asheet,
-                     cells=a1_range(arow, a_in[0][0], arow, a_in[-1][0])),
-        "b_src": Src(file=bwb.source.idx, sheet=bsheet,
-                     cells=a1_range(brow, b_in[0][0], brow, b_in[-1][0])),
-    }
 
 
 # --------------------------------------------------------------------------
@@ -617,7 +657,8 @@ def _run_trajectory(wbs: list[Workbook], tables, ctx, extras) -> list:
                             Value(n=found[d][y][1], unit=tdef.unit,
                                   src=Src(file=wb.source.idx, sheet=sname,
                                           cells=a1(rownos[d], found[d][y][0])))
-                            for y in ordered if y in found[d]
+                            if y in found[d] else None
+                            for y in ordered
                         ],
                     )
                     for i, d in enumerate(drawn)
@@ -631,195 +672,92 @@ def _run_trajectory(wbs: list[Workbook], tables, ctx, extras) -> list:
 # efficiency — the rate a plan implied, against the rate reality produced
 # --------------------------------------------------------------------------
 
-def _run_efficiency(wbs: list[Workbook], tables, ctx, extras) -> list:
-    """Cost per tonne, extraction rate, yield per hectare — any rate the
-    client declares as one metric over another.
-
-    This is the module that catches what a money-only view hides. Spending
-    40 % of a budget reads as comfortable until output is at 30 % of plan:
-    the rate is what carries that, and neither figure alone says it."""
-    if not ctx or not getattr(ctx, "ratios", None):
+def _run_efficiency(wbs, tables, ctx, extras):
+    if not ctx or not ctx.ratios:
         return []
-    metrics = ctx.metrics or {}
-    blocks: list = []
-    for rname, rdef in ctx.ratios.items():
-        num, den = metrics.get(rdef.numerator), metrics.get(rdef.denominator)
+    blocks = []
+    for name, rdef in ctx.ratios.items():
+        num, den = ctx.metrics.get(rdef.numerator), ctx.metrics.get(rdef.denominator)
         if not num or not den:
             continue
-        an, ad = _aligned(wbs, num), _aligned(wbs, den)
+        an, ad = _aligned(wbs,num), _aligned(wbs,den)
         if not an or not ad:
             continue
-        n = min(an["n"], ad["n"])          # compare over months both cover
-        if not an["sum_a"] or not ad["sum_a"] or not ad["sum_b"]:
+        common = sorted(set(an['months']) & set(ad['months']))
+        an, ad = _alignment_subset(an,common), _alignment_subset(ad,common)
+        if not an or not ad or not ad['sum_a'] or not ad['sum_b']:
             continue
-        scale = 100.0 if rdef.unit == "pct" else 1.0
-        actual = an["sum_a"] / ad["sum_a"] * scale
-        planned = an["sum_b"] / ad["sum_b"] * scale
-        gap = (actual / planned - 1) * 100 if planned else 0.0
-        worse = gap > 0 if rdef.lower_is_better else gap < 0
-        fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
-        num_u = "" if num.unit == "none" else f" {num.unit}"
-        den_u = "" if den.unit == "none" else f" {den.unit}"
-        blocks.append(
-            KpiGrid(items=[Kpi(
-                label=Text(fr=rname, en=rname),
-                value=Value(n=round(actual, 1), unit=rdef.unit, derived="ratio",
-                            src=an["a_src"]),
-                sub=Text(
-                    fr=(f"contre {planned:,.1f} prévu — {gap:+.0f} % sur {n} mois"
-                        .replace(",", " ").replace(".", ",")),
-                    en=(f"against {planned:,.1f} planned — {gap:+.0f} % over {n} months"),
-                ),
-                tone="bad" if worse and abs(gap) > 15 else
-                     "warn" if worse else "good",
-                metric=rname,
-                definition=rdef.definition,
-                methodology=rdef.methodology,
-                lineage=[
-                    Step(text=Text(
-                            fr=f"{rdef.numerator} réel sur {n} mois",
-                            en=f"actual {rdef.numerator} over {n} months"),
-                         cells=f"{an['asheet']}!{an['a_src'].cells}",
-                         n=round(an["sum_a"], 2)),
-                    Step(text=Text(
-                            fr=f"{rdef.denominator} réel sur les mêmes mois",
-                            en=f"actual {rdef.denominator} over the same months"),
-                         cells=f"{ad['asheet']}!{ad['a_src'].cells}",
-                         n=round(ad["sum_a"], 2)),
-                    Step(text=Text(
-                            fr=f"Taux réel : {fmt(an['sum_a'])}{num_u} ÷ {fmt(ad['sum_a'])}{den_u}",
-                            en=f"Actual rate: {fmt(an['sum_a'])}{num_u} ÷ {fmt(ad['sum_a'])}{den_u}"),
-                         n=round(actual, 1)),
-                    Step(text=Text(
-                            fr=f"Taux prévu au plan : {fmt(an['sum_b'])}{num_u} ÷ {fmt(ad['sum_b'])}{den_u}",
-                            en=f"Rate the plan implied: {fmt(an['sum_b'])}{num_u} ÷ {fmt(ad['sum_b'])}{den_u}"),
-                         cells=f"{an['bsheet']}!{an['b_src'].cells}",
-                         n=round(planned, 1)),
-                    Step(text=Text(fr="Écart au plan", en="Gap to plan"),
-                         n=round(gap, 1)),
-                ],
-            )])
-        )
+        scale = 100.0 if rdef.unit == 'pct' else 1.0
+        actual, planned = an['sum_a']/ad['sum_a']*scale, an['sum_b']/ad['sum_b']*scale
+        gap = (actual/planned-1)*100 if planned else None
+        worse = gap is not None and (gap > 0 if rdef.lower_is_better else gap < 0)
+        cross_years = any(an[key] and ad[key] and an[key] != ad[key] for key in ('actual_years','budget_years'))
+        mismatch = bool(an['year_mismatch'] or ad['year_mismatch'] or cross_years)
+        blocks += _period_review(an,name) or _period_review(ad,name)
+        if cross_years:
+            blocks.append(Flag(severity='blocked',tag=Text(fr='Périodes à vérifier',en='Periods require review'),title=Text(fr=f'{name} : années différentes entre mesures',en=f'{name}: measure years differ'),body=Text(fr='Les mesures du numérateur et du dénominateur indiquent des années différentes. Le ratio reste non vérifié.',en='The numerator and denominator measures indicate different years. This ratio is unverified.')))
+        prefix_fr, prefix_en = ('NON VÉRIFIÉ · ','UNVERIFIED · ') if mismatch else ('','')
+        gap_fr = f'{gap:+.0f} %' if gap is not None else 'écart indéfini (plan nul)'
+        gap_en = f'{gap:+.0f} %' if gap is not None else 'gap undefined (zero plan)'
+        steps = [Step(text=Text(fr=f'{rdef.numerator} réel sur {len(common)} mois communs', en=f'Actual {rdef.numerator} over {len(common)} common months'), cells=f"{an['asheet']}!{an['a_src'].cells}",n=round(an['sum_a'],2)),
+                 Step(text=Text(fr=f'{rdef.denominator} réel sur les mêmes mois', en=f'Actual {rdef.denominator} over the same months'), cells=f"{ad['asheet']}!{ad['a_src'].cells}",n=round(ad['sum_a'],2)),
+                 Step(text=Text(fr='Ratio réel',en='Actual ratio'),n=round(actual,1)),
+                 Step(text=Text(fr='Ratio du plan sur les mêmes mois',en='Planned ratio over the same months'),cells=f"{an['bsheet']}!{an['b_src'].cells}",n=round(planned,1)),
+                 Step(text=Text(fr='Écart au plan',en='Gap to plan'),n=round(gap,1) if gap is not None else None)]
+        blocks.append(KpiGrid(items=[Kpi(label=Text(fr=name,en=name),value=Value(n=round(actual,1),unit=rdef.unit,derived='ratio',src=an['a_src']),
+            sub=Text(fr=f'{prefix_fr}contre {planned:,.1f} prévu — {gap_fr} sur {len(common)} mois communs', en=f'{prefix_en}against {planned:,.1f} planned — {gap_en} over {len(common)} common months'),
+            tone='warn' if mismatch or gap is None else 'bad' if worse and abs(gap)>15 else 'warn' if worse else 'good',
+            metric=name,definition=rdef.definition,methodology=rdef.methodology,lineage=steps)]))
     return blocks
 
 
-def _run_budget_actual(wbs: list[Workbook], tables, ctx, extras) -> list:
-    """For each metric the context declares: align the budget and actual
-    monthly series from wherever they live, compare over the months the
-    actuals cover — phased budget, never the annual rate — and compute
-    execution as a ratio of totals. Both defects the manual analysis found
-    in the client's own reporting, encoded as the definition."""
-    if not ctx or not getattr(ctx, "metrics", None):
+
+def _run_budget_actual(wbs, tables, ctx, extras):
+    if not ctx or not ctx.metrics:
         return []
-    blocks: list = []
-    for mname, mdef in ctx.metrics.items():
+    blocks = []
+    months_fr = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
+    for name, mdef in ctx.metrics.items():
         al = _aligned(wbs, mdef)
-        if not al:
+        if not al or not al['sum_b']:
+            blocks.append(Flag(severity='warn', tag=Text(fr='Comparaison indisponible', en='Comparison unavailable'),
+                               title=Text(fr=name, en=name), body=Text(fr='Vérifiez les lignes, les en-têtes de mois et le budget. Aucune valeur manquante n’est remplacée par zéro.', en='Review the measure rows, month headers, and budget. Missing values are not replaced with zero.')))
             continue
-        n, sum_a, sum_b = al["n"], al["sum_a"], al["sum_b"]
-        if not sum_b:
-            continue
-        awb, asheet, arow = al["awb"], al["asheet"], al["arow"]
-        bwb, bsheet, brow = al["bwb"], al["bsheet"], al["brow"]
-        bmap, amap = al["bmap"], al["amap"]
-        pct = round(sum_a / sum_b * 100, 1)
-        a_range, b_range = al["a_src"].cells, al["b_src"].cells
-        fmt = lambda x: f"{x:,.0f}".replace(",", " ")  # noqa: E731
-        lineage = [
-            Step(
-                text=Text(
-                    fr=f"Somme des {n} mois réels de « {mdef.actual.label} » ({awb.source.filename})",
-                    en=f"Sum of the {n} actual months of “{mdef.actual.label}” ({awb.source.filename})",
-                ),
-                cells=f"{asheet}!{a_range}",
-                n=round(sum_a, 2),
-            ),
-            Step(
-                text=Text(
-                    fr=f"Somme du budget phasé sur les {n} mêmes mois de « {mdef.budget.label} » ({bwb.source.filename}) — jamais le rythme annuel",
-                    en=f"Sum of the phased budget over the same {n} months of “{mdef.budget.label}” ({bwb.source.filename}) — never the annual rate",
-                ),
-                cells=f"{bsheet}!{b_range}",
-                n=round(sum_b, 2),
-            ),
-            Step(
-                text=Text(
-                    fr="Ratio des totaux : somme des réels ÷ somme du budget phasé — jamais moyenne des ratios",
-                    en="Ratio of totals: sum of actuals ÷ sum of phased budget — never an average of ratios",
-                ),
-                n=pct,
-            ),
-        ]
-        blocks.append(
-            KpiGrid(
-                items=[
-                    Kpi(
-                        label=Text(fr=f"Exécution · {mname}",
-                                   en=f"Execution · {mname}"),
-                        value=Value(
-                            n=pct, unit="pct", derived="ratio",
-                            src=Src(file=awb.source.idx, sheet=asheet,
-                                    cells=a_range),
-                        ),
-                        sub=Text(
-                            fr=f"{fmt(sum_a)} réels contre {fmt(sum_b)} de budget phasé sur {n} mois — ratio des totaux",
-                            en=f"{fmt(sum_a)} actual against {fmt(sum_b)} phased budget over {n} months — ratio of totals",
-                        ),
-                        tone="bad" if pct > 115 else "warn" if pct < 60 else "neutral",
-                        metric=mname,
-                        definition=mdef.definition,
-                        methodology=mdef.methodology,
-                        lineage=lineage,
-                    )
-                ]
-            )
-        )
-        # The chart is positional — bar i sits under month i — so each series
-        # stops at its first missing month rather than sliding later months
-        # under the wrong label. Fewer bars beats mislabelled ones.
-        def _prefix(mapping):
-            out, off = [], 0
-            while off in mapping:
-                out.append(mapping[off])
-                off += 1
-            return out
-
-        m = min(len(_prefix(bmap)), 12)
-        plan_cells = _prefix(bmap)[:m]
-        act_cells = _prefix(amap)[:m]
-        blocks.append(
-            BarPair(
-                title=Text(fr=f"{mname} · budget contre réel",
-                           en=f"{mname} · budget vs actual"),
-                sub=Text(fr="mensuel", en="monthly"),
-                x="months",
-                series=[
-                    Series(
-                        key="plan",
-                        label=Text(fr="Budget", en="Budget"),
-                        values=[
-                            Value(n=v, unit=mdef.unit,
-                                  src=Src(file=bwb.source.idx, sheet=bsheet,
-                                          cells=a1(brow, c)))
-                            for c, v in plan_cells
-                        ],
-                    ),
-                    Series(
-                        key="act",
-                        label=Text(fr="Réel", en="Actual"),
-                        values=[
-                            Value(n=v, unit=mdef.unit,
-                                  src=Src(file=awb.source.idx, sheet=asheet,
-                                          cells=a1(arow, c)))
-                            for c, v in act_cells
-                        ],
-                    ),
-                ],
-                cutoff=len(act_cells),
-                fmt="k",
-            )
-        )
+        blocks += _period_review(al, name)
+        n, sa, sb = al['n'], al['sum_a'], al['sum_b']
+        pct = round(sa / sb * 100, 1)
+        selected = ', '.join(months_fr[m] for m in al['months'])
+        status_fr = 'NON VÉRIFIÉ · ' if al['year_mismatch'] else ''
+        status_en = 'UNVERIFIED · ' if al['year_mismatch'] else ''
+        blocks.append(KpiGrid(items=[Kpi(label=Text(fr=f'Exécution · {name}', en=f'Execution · {name}'),
+            value=Value(n=pct, unit='pct', src=al['a_src'], derived='ratio'),
+            sub=Text(fr=f'{status_fr}{sa:,.0f} réels contre {sb:,.0f} de budget phasé sur {n} mois observés — {selected}',
+                     en=f'{status_en}{sa:,.0f} actual against {sb:,.0f} phased budget over {n} observed months — {selected}'),
+            tone='warn' if al['year_mismatch'] else 'bad' if pct > 115 else 'warn' if pct < 60 else 'neutral',
+            metric=name, definition=mdef.definition, methodology=mdef.methodology,
+            lineage=[Step(text=Text(fr=f'Réels : {selected}', en=f'Actuals for selected months: {selected}'), cells=f"{al['asheet']}!{al['a_src'].cells}", n=round(sa,2)),
+                     Step(text=Text(fr=f'Budget phasé : {selected}', en=f'Phased budget for the same months: {selected}'), cells=f"{al['bsheet']}!{al['b_src'].cells}", n=round(sb,2)),
+                     Step(text=Text(fr='Ratio des totaux', en='Ratio of totals'), n=pct)])]))
+        if al['missing_months']:
+            blocks.append(Flag(severity='warn', tag=Text(fr='Mois incomplets', en='Incomplete months'),
+                               title=Text(fr=f'{name} : comparaison limitée aux observations communes', en=f'{name}: comparison uses common observed months'),
+                               body=Text(fr='Les cellules manquantes restent manquantes. Elles sont exclues du ratio et représentées par des espaces dans le graphique.', en='Missing cells remain missing. They are excluded from the ratio and remain gaps in the chart.')))
+        span = al['chart_months']
+        series = []
+        for prefix, key, fr, en in [('b','plan','Budget','Budget'), ('a','act','Réel','Actual')]:
+            values = [Value(n=al[prefix+'map'][m][1], unit=mdef.unit,
+                            src=Src(file=al[prefix+'wb'].source.idx, sheet=al[prefix+'sheet'], cells=a1(al[prefix+'row'],al[prefix+'map'][m][0])))
+                      if m in al[prefix+'map'] else None for m in span]
+            # Trailing missing months need no padding; internal holes retain
+            # their index. This preserves existing complete-series payloads.
+            while values and values[-1] is None:
+                values.pop()
+            series.append(Series(key=key,label=Text(fr=fr,en=en),values=values))
+        blocks.append(BarPair(title=Text(fr=f'{status_fr}{name} · budget contre réel', en=f'{status_en}{name} · budget vs actual'),
+                              sub=Text(fr='mensuel', en='monthly'), x=[months_fr[m] for m in span], series=series,
+                              cutoff=len(series[1].values),fmt='k'))
     return blocks
+
 
 
 # --------------------------------------------------------------------------
@@ -1006,78 +944,39 @@ def _numbers_in(text: str) -> set[str]:
     return {re.sub(r"[^\d]", "", m) for m in _NUM_RE.findall(text)}
 
 
-def _llm_polish(facts: list[tuple[str, str]]) -> tuple[str, str] | None:
-    """Optional: ask Claude to turn the fact sentences into flowing analyst
-    prose. Gated on ANTHROPIC_API_KEY being present in the environment; any
-    failure — network, refusal, invented figures — falls back to the
-    template. The model may rephrase; it may not add or alter a number."""
-    import json
-    import os
-
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
+def _llm_polish(facts):
+    """Optional editorial ordering only. Whole computed fact statements are
+    immutable; a model cannot alter digits, signs, units, or metric binding."""
+    import os,json
+    key=os.environ.get('ANTHROPIC_API_KEY')
+    if not key or not facts:
         return None
     try:
         import httpx
-
-        model = os.environ.get("LUMNIA_NARRATE_MODEL", "claude-opus-5")
-        facts_fr = "\n".join(f"- {fr}" for fr, _ in facts)
-        facts_en = "\n".join(f"- {en}" for _, en in facts)
-        r = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": model,
-                "max_tokens": 1024,
-                "system": (
-                    "You write the narrative paragraph of a verified financial "
-                    "report. You receive computed facts; every number in them "
-                    "is final. Reuse each number EXACTLY as written — same "
-                    "digits, same grouping. Never introduce a figure that is "
-                    "not in the facts, never total, never estimate. Respond "
-                    "with a JSON object {\"fr\": \"...\", \"en\": \"...\"}: "
-                    "one short professional paragraph per language, nothing "
-                    "else."
-                ),
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Faits (français):\n{facts_fr}\n\n"
-                            f"Facts (English):\n{facts_en}"
-                        ),
-                    }
-                ],
-            },
-            timeout=25.0,
-        )
-        if r.status_code != 200:
+        menu=[{'id':i,'fr':fr,'en':en} for i,(fr,en) in enumerate(facts)]
+        response=httpx.post('https://api.anthropic.com/v1/messages',
+            headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+            json={'model':os.environ.get('LUMNIA_NARRATE_MODEL','claude-opus-5'),'max_tokens':512,
+                  'system':'Order the supplied immutable financial fact statements into a clear narrative. Return ONLY JSON {"order":[integer ids]}. Every supplied id must appear exactly once. Never write or modify a statement.',
+                  'messages':[{'role':'user','content':json.dumps(menu,ensure_ascii=False)}]},timeout=25.0)
+        if response.status_code!=200:
             return None
-        data = r.json()
-        if data.get("stop_reason") == "refusal":
+        data=response.json()
+        if data.get('stop_reason')=='refusal':
             return None
-        text = "".join(
-            p.get("text", "") for p in data.get("content", [])
-            if p.get("type") == "text"
-        ).strip()
-        if text.startswith("```"):
-            text = text.strip("`").removeprefix("json").strip()
-        out = json.loads(text)
-        fr, en = str(out["fr"]), str(out["en"])
-        # The guardrail: the prose must carry exactly the numbers the facts
-        # carry — none dropped, none invented.
-        if (
-            _numbers_in(fr) != _numbers_in(facts_fr)
-            or _numbers_in(en) != _numbers_in(facts_en)
-        ):
+        text=''.join(p.get('text','') for p in data.get('content',[]) if p.get('type')=='text').strip()
+        if text.startswith('```'):
+            text=text.strip('`').removeprefix('json').strip()
+        payload=json.loads(text)
+        if not isinstance(payload,dict) or set(payload)!={'order'}:
             return None
-        return fr, en
+        order=payload['order']
+        if not isinstance(order,list) or any(type(i) is not int for i in order) or sorted(order)!=list(range(len(facts))):
+            return None
+        return ' '.join(facts[i][0] for i in order),' '.join(facts[i][1] for i in order)
     except Exception:
         return None
+
 
 
 def _run_narrate(wbs: list[Workbook], tables, ctx, extras) -> list:
@@ -1205,7 +1104,8 @@ def run_modules(names: list[str], wbs: list[Workbook], tables, ctx, extras) -> t
     `narrate` always goes last, whatever order the context lists: it speaks
     about what the others computed, so it must see their blocks — passed to
     every module as extras["blocks"], the output accumulated so far."""
-    ordered = [n for n in names if n != "narrate"]
+    wbs, tables = _filtered_inputs(wbs, tables, ctx)
+    ordered = list(dict.fromkeys(n for n in names if n != "narrate"))
     if "narrate" in names:
         ordered.append("narrate")
     blocks: list = []

@@ -1,0 +1,21 @@
+.lumnia-workspace-entry {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 18px;
+  border: 1px solid #c9992a;
+  border-radius: 8px;
+  background: #17140f;
+  color: #ece5d6;
+  box-shadow: 0 4px 24px #17140f30;
+  font: 500 14px/1.4 system-ui, sans-serif;
+  text-decoration: none;
+}
+.lumnia-workspace-entry[hidden] { display: none; }
+.lumnia-workspace-entry img { display: block; width: 27px; height: 27px; }
+.lumnia-workspace-entry:hover { background: #282117; color: #f4f0e8; }
+.lumnia-workspace-entry:focus-visible { outline: 3px solid #c9992a; outline-offset: 4px; }

@@ -112,14 +112,8 @@ def test_g3_ratio_of_totals_never_average_of_ratios(tmp_path):
     assert k.value.n != pytest.approx(42.7, abs=1.0)          # the average of ratios
 
 
-def test_g3b_a_month_with_no_spend_does_not_shift_the_others(tmp_path):
-    """Found by review, not by a client — which is the point of a gate.
-
-    A month with no spend leaves a blank cell. Pairing the surviving cells
-    in order compared March's spend against February's budget and dropped
-    March's budget entirely: 13,3 % reported where the truth is 6,7 %.
-    Hand-worked: spent 10 (Jan) + 30 (Mar) = 40 against a budget of
-    100 + 200 + 300 = 600 over those three months."""
+def test_g3b_missing_month_stays_missing_without_shifting_the_others(tmp_path):
+    """A blank is unknown. Compare Jan/Mar against the same observed months; keep the chart gap."""
     budget = {"opex": [
         ["Poste", "Jan", "Fév", "Mar"],
         ["Ligne", 5, 5, 5],
@@ -132,14 +126,14 @@ def test_g3b_a_month_with_no_spend_does_not_shift_the_others(tmp_path):
     ]}
     blocks, _ = _run([budget, actual], BVA_CTX, tmp_path)
     k = _kpis(blocks)[0]
-    assert k.value.n == pytest.approx(6.7, abs=0.1)
+    assert k.value.n == pytest.approx(10.0, abs=0.1)
     assert k.lineage[0].n == 40.0
-    assert k.lineage[1].n == 600.0
+    assert k.lineage[1].n == 400.0
     # the chart stops at the gap rather than sliding March under February
     bar = next(b for b in blocks if getattr(b, "type", "") == "barPair")
     act = bar.series[1]
-    assert [v.n for v in act.values] == [10.0]
-    assert bar.cutoff == 1
+    assert [v.n if v is not None else None for v in act.values] == [10.0, None, 30.0]
+    assert bar.cutoff == 3
 
 
 def test_g3c_a_budgeted_line_with_no_spend_stays_in_the_denominator(tmp_path):

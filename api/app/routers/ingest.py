@@ -27,7 +27,7 @@ from ..schema import Prose, Report, Source, Text
 router = APIRouter()
 author = Depends(require_author)
 
-ALLOWED = {".xlsx", ".xlsm"}
+ALLOWED = {".xlsx", ".xlsm", ".csv", ".tsv"}
 MAX_BYTES = 25 * 1024 * 1024
 
 
@@ -39,6 +39,8 @@ class SheetInfo(BaseModel):
 
 
 class CheckReport(BaseModel):
+    file: int | None = None
+    sheet: str | None = None
     name: str
     passed: bool
     detail: str
@@ -72,6 +74,8 @@ class IngestionDelta(BaseModel):
     changes: list[ValueChange] = []
     alerts: list[ValueChange] = []
     notes: list[str] = []
+    changes_total: int = 0
+    alerts_total: int = 0
 
 
 class IngestionRecord(BaseModel):
@@ -103,21 +107,32 @@ async def ingest(
 ):
     """One or several workbooks in one session — budget and actuals side by
     side. Sources are indexed in upload order; provenance carries the file."""
+    if len(file) > 8:
+        raise HTTPException(413, "Upload at most eight workbooks at a time.")
+    names = [f.filename for f in file]
+    if len(names) != len(set(names)):
+        raise HTTPException(422, "Each workbook in one upload must have a different filename.")
+    ctx = store.get_context(org)
+    ignored = {name.strip().casefold() for name in (ctx.ignore_sheets if ctx else [])}
     wbs = []
     bodies: dict[int, bytes] = {}
     for i, f in enumerate(file):
         ext = Path(f.filename or "").suffix.lower()
         if ext not in ALLOWED:
             raise HTTPException(415, f"Unsupported type '{ext}'. Accepts: {sorted(ALLOWED)}")
-        body = await f.read()
+        body = await f.read(MAX_BYTES + 1)
         if len(body) > MAX_BYTES:
             raise HTTPException(413, f"File exceeds {MAX_BYTES // 1024 // 1024} MB")
+        if sum(len(b) for b in bodies.values()) + len(body) > 64 * 1024 * 1024:
+            raise HTTPException(413, "Combined upload exceeds 64 MB")
         bodies[i] = body
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
             tmp.write(body)
             tmp_path = Path(tmp.name)
         try:
             wb = read_workbook(tmp_path, idx=i)
+        except Exception as exc:
+            raise HTTPException(422, f"Could not read {f.filename}. Use a valid, unencrypted spreadsheet with calculated formula values.") from exc
         finally:
             tmp_path.unlink(missing_ok=True)
         wb.source.filename = f.filename or wb.source.filename
@@ -139,6 +154,8 @@ async def ingest(
     checks: list[CheckReport] = []
     for wb in wbs:
         for s in wb.sheets.values():
+            if s.name.strip().casefold() in ignored:
+                continue
             for col in range(2, 6):
                 pairs = [
                     (str(s.cell(r, col - 1)), s.cell(r, col))
@@ -152,6 +169,7 @@ async def ingest(
                 if not res.passed:
                     checks.append(
                         CheckReport(
+                            file=wb.source.idx, sheet=s.name,
                             name=f"{res.name} · {s.name}!col{col}",
                             passed=False,
                             detail=res.detail,
@@ -159,6 +177,10 @@ async def ingest(
                         )
                     )
 
+    for wb in wbs:
+        for warning in wb.warnings[:100]:
+            if warning["sheet"].strip().casefold() not in ignored:
+                checks.append(CheckReport(file=wb.source.idx, sheet=warning["sheet"], name="Formula / cache review", passed=False, detail=warning["detail"], data={"cells": warning["cells"]}))
     if not checks:
         checks.append(
             CheckReport(
@@ -167,17 +189,26 @@ async def ingest(
                 detail="No flattened rollups detected in any sheet.",
             )
         )
-    for wb in wbs:
-        wb.source.checks_run = len(checks)
-        wb.source.checks_passed = sum(c.passed for c in checks)
 
     # Layer 02: detect tables, build the reviewable draft. The client's
     # context (latest version) shapes both — ignored sheets are never read,
     # units and aliases come from what this client's books actually mean.
-    ctx = store.get_context(org)
     detected: list = []
     for wb in wbs:
         detected += [(wb.source.idx, t) for t in detect_tables(wb, ctx)]
+    if not detected:
+        checks.append(CheckReport(name="Table detection", passed=False, detail="No usable table detected. Review headers, number formats and formula results."))
+    for idx, table in detected:
+        if table.confidence < 0.8 or table.notes:
+            checks.append(CheckReport(file=idx, sheet=table.sheet, name="Table review", passed=False, detail="Review inferred headers and values. " + "; ".join(table.notes), data={"cells": table.cells}))
+    from ..pipeline.checks import check_detected_tables
+    for idx, table in detected:
+        for check in check_detected_tables(wbs[idx], table):
+            checks.append(CheckReport(file=idx, sheet=table.sheet, name=check.name, passed=check.passed, detail=check.detail, data=check.data))
+    for wb in wbs:
+        own_checks = [c for c in checks if c.file is None or c.file == wb.source.idx]
+        wb.source.checks_run = len(own_checks)
+        wb.source.checks_passed = sum(c.passed for c in own_checks)
     draft = build_draft(wbs, detected, org, ctx) if detected else None
 
     # Recurring ingestion: remember each file, and if we've seen it for this
@@ -185,8 +216,10 @@ async def ingest(
     # threshold, structural changes as notes. Deltas merge across files.
     ingestion = None
     delta_raw = None
+    pending_entries = []
+    pending_run = None
     if detected and store.get_org(org):
-        merged = {"changes": [], "alerts": [], "notes": []}
+        merged = {"changes": [], "alerts": [], "notes": [], "changes_total": 0, "alerts_total": 0}
         seqs, prev_ts = [], None
         for wb in wbs:
             own = [t for i, t in detected if i == wb.source.idx]
@@ -194,19 +227,20 @@ async def ingest(
                 continue
             snap = snapshot(wb, own)
             prev = store.last_ingestion(org, wb.source.filename)
-            seq = store.put_ingestion(org, wb.source.filename, wb.source.sha256, snap)
+            seq = (prev["seq"] if prev else 0) + 1
             seqs.append(seq)
             # Keep the workbook itself when the client's context allows, so a
             # question can be asked of these books without a re-upload.
-            if (ctx.retain_files if ctx else True) and wb.source.idx in bodies:
-                store.put_file(org, wb.source.filename, seq, wb.source.sha256,
-                               bodies[wb.source.idx])
+            pending_entries.append({"filename": wb.source.filename, "seq": seq, "sha256": wb.source.sha256, "summary": snap,
+                                    "body": bodies.get(wb.source.idx) if (ctx.retain_files if ctx else True) else None})
             if prev:
                 prev_ts = prev_ts or prev["ts"]
                 threshold = ctx.alert_threshold_pct if ctx else 20.0
                 d = diff(prev["summary"], snap, threshold)
-                for k in merged:
+                for k in ("changes", "alerts", "notes"):
                     merged[k] += d[k]
+                merged["changes_total"] += d.get("changes_total", len(d["changes"]))
+                merged["alerts_total"] += d.get("alerts_total", len(d["alerts"]))
         if prev_ts:
             delta_raw = merged
             ingestion = IngestionDelta(seq=max(seqs), previous_ts=prev_ts, **merged)
@@ -238,13 +272,14 @@ async def ingest(
         # behind, so the same figure can be watched across versions of
         # the client's file.
         if modules_run and store.get_org(org):
-            store.put_run(
-                org,
-                modules_run,
-                facts_of(blocks),
-                blocks=[b.model_dump(mode="json") for b in blocks],
-                sources=[wb.source.model_dump(mode="json") for wb in wbs],
-            )
+            pending_run = {"modules": modules_run, "facts": facts_of(blocks), "blocks": [b.model_dump(mode="json") for b in blocks],
+                           "sources": [wb.source.model_dump(mode="json") for wb in wbs]}
+
+    if pending_entries:
+        try:
+            store.commit_ingest(org, pending_entries, pending_run, getattr(ctx, "version", None))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     return Inventory(
         sources=[wb.source for wb in wbs],

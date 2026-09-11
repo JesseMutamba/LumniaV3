@@ -79,6 +79,10 @@ def _is_text(v) -> bool:
     return isinstance(v, str) and v.strip() != ""
 
 
+def _is_header(v) -> bool:
+    return _is_text(v) or isinstance(v, date) or (_is_num(v) and float(v).is_integer() and 1900 <= v <= 2100)
+
+
 def _blocks(sheet: Sheet) -> list[tuple[int, int]]:
     """Contiguous runs of non-blank rows, as inclusive 1-indexed (r0, r1)."""
     out: list[tuple[int, int]] = []
@@ -101,7 +105,7 @@ def _detect_in_block(sheet: Sheet, r0: int, r1: int) -> DetectedTable | None:
         (
             r
             for r in range(r0, r1 + 1)
-            if sum(_is_text(sheet.cell(r, c)) for c in range(1, _width(sheet) + 1)) >= 2
+            if any(_is_text(sheet.cell(r, c)) for c in range(1, _width(sheet) + 1)) and sum(_is_header(sheet.cell(r, c)) for c in range(1, _width(sheet) + 1)) >= 2
         ),
         None,
     )
@@ -111,7 +115,7 @@ def _detect_in_block(sheet: Sheet, r0: int, r1: int) -> DetectedTable | None:
     cols = [
         DetectedColumn(index=c, label=str(sheet.cell(header_row, c)).strip(), kind="text")
         for c in range(1, _width(sheet) + 1)
-        if _is_text(sheet.cell(header_row, c))
+        if _is_header(sheet.cell(header_row, c))
     ]
     if len(cols) < 2:
         return None
