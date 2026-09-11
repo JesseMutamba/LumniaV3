@@ -87,3 +87,6 @@
   .gs-root .gs-topbar [data-slot=button]{min-height:40px;height:auto}
   .gs-root .gs-topbar>div{flex-wrap:wrap}
 }
+
+/* Keep conversation updates inside their own scroll area without motion. */
+.gs-root .gs-chat-messages{scroll-behavior:auto;overscroll-behavior:contain;overflow-anchor:none}
