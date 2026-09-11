@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Turn spreadsheets into clear dashboards and financial reviews. Prepare messy data, explore it with questions, and save the results in Lumnia.">
+  <meta name="theme-color" content="#17140f">
+  <title>Lumnia — From spreadsheets to understanding</title>
+  <link rel="icon" type="image/svg+xml" href="/brand/lumnia-mark-paper.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/home.css">
+  <script src="/home.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap nav-row">
+      <a class="brand" href="/" aria-label="Lumnia home"><img src="/brand/lumnia-logo-void.svg" alt="LUMNIA" width="184" height="48"></a>
+      <nav class="desktop-nav" aria-label="Main navigation">
+        <a href="#workflow">How it works</a><a href="#reviews">Financial reviews</a><a href="/workspace/#/reports">Reports</a>
+      </nav>
+      <div class="nav-actions"><a class="sign-in" href="/workspace/#/analysis">Sign in</a><a class="button button-gold" href="/signup/">Request access <span aria-hidden="true">↗</span></a></div>
+      <details class="mobile-nav"><summary>Menu <span aria-hidden="true">☰</span></summary><nav aria-label="Mobile navigation"><a href="#workflow">How it works</a><a href="#reviews">Financial reviews</a><a href="/workspace/#/reports">Reports</a><a href="/workspace/#/analysis">Sign in to Studio</a><a href="/signup/">Request access</a></nav></details>
+    </div>
+  </header>
+  <main id="main" tabindex="-1">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="gold-dot" aria-hidden="true"></span> Operating intelligence for frontier industry</p>
+        <h1 id="hero-title">Your spreadsheets.<br>A clearer way <em>forward.</em></h1>
+        <p class="lede">Turn business data into dashboards you can understand, question and use. Upload your files, review the preparation, and see what is driving performance.</p>
+        <div class="hero-actions"><a class="button button-dark" href="/workspace/#/analysis">Open Analytics Studio <span aria-hidden="true">↗</span></a><a class="text-link" href="/reports/sample/#/r/demo-estate-q1?k=sample">Explore a sample report <span aria-hidden="true">↗</span></a></div>
+        <p class="helper">Excel, CSV and TSV · Existing clients can sign in.<br>New to Lumnia? <a href="/signup/">Request access</a>.</p>
+      </div>
+      <div class="product-preview" aria-label="Interactive sales dashboard example">
+        <div class="preview-top"><span><img src="/brand/lumnia-mark-paper.svg" alt="" width="24" height="24"> Analytics Studio</span><span class="example-label">Sales example</span></div>
+        <div class="preview-body">
+          <div class="preview-title"><div><p class="eyebrow">Q1 performance</p><h2>A question. A clearer picture.</h2></div><span class="file-label">sales.csv</span></div>
+          <div class="query"><span class="query-icon" aria-hidden="true">↗</span> “Show monthly revenue”</div>
+          <div class="chart-panel">
+            <div class="chart-title"><h3>Monthly revenue</h3><span>USD</span></div>
+            <div class="metric">$324,000 <span>Total · Jan–Mar</span></div>
+            <div class="bar-chart" role="img" aria-label="Monthly revenue: January 92,000 dollars, February 108,000 dollars, March 124,000 dollars. Total 324,000 dollars.">
+              <div class="bar-column"><span class="bar-value">$92K</span><div class="bar bar-jan"></div><span>Jan</span></div>
+              <div class="bar-column"><span class="bar-value">$108K</span><div class="bar bar-feb"></div><span>Feb</span></div>
+              <div class="bar-column"><span class="bar-value">$124K</span><div class="bar bar-mar"></div><span>Mar</span></div>
+            </div>
+          </div>
+          <button id="add-region" class="preview-command" type="button" aria-expanded="false" aria-controls="region-chart">Try it: add revenue by region <span aria-hidden="true">+</span></button>
+          <div id="region-chart" class="region-chart" hidden>
+            <div class="chart-title"><h3>Revenue by region</h3><span>USD</span></div>
+            <div class="region-row"><span>West</span><div class="region-track"><div style="width:100%"></div></div><strong>$154K</strong></div>
+            <div class="region-row"><span>Central</span><div class="region-track"><div style="width:66.23%"></div></div><strong>$102K</strong></div>
+            <div class="region-row"><span>East</span><div class="region-track"><div style="width:44.16%"></div></div><strong>$68K</strong></div>
+          </div>
+          <p id="preview-status" class="preview-note" aria-live="polite">One dashboard. Keep building on the same analysis.</p>
+        </div>
+        <p class="preview-caption">Interactive preview · illustrative sales data</p>
+        <noscript><p class="preview-caption">Open Studio to explore your own data. This preview needs JavaScript for the region breakdown.</p></noscript>
+      </div>
+    </section>
+    <div class="audience-band"><div class="wrap"><p>Built for the people running the business.</p><ul aria-label="Teams"><li>Finance</li><li>Operations</li><li>Leadership</li></ul></div></div>
+    <section class="section wrap" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-heading"><div><p class="eyebrow">From file to decision</p><h2 id="workflow-title">A workflow that starts<br>where your data lives.</h2></div><p>Your workbooks are the starting point. Lumnia helps you prepare the data, explore the results and keep a review you can return to.</p></div>
+      <ol class="steps">
+        <li><span class="step-number">01</span><h3>Upload &amp; prepare</h3><p>Bring your spreadsheets together. Review detected tables, measures and data quality issues before using them in an analysis.</p><span class="step-detail">Keep the source. Understand the changes.</span></li>
+        <li><span class="step-number">02</span><h3>Ask &amp; explore</h3><p>Use questions such as “Show monthly revenue” or “Add revenue by region” to build on the same dashboard.</p><span class="step-detail">Follow the question that matters next.</span></li>
+        <li><span class="step-number">03</span><h3>Save &amp; return</h3><p>Save your analysis and reopen it later. Publish a financial review to your private Reports tab when you want to keep a fixed version.</p><span class="step-detail">A working analysis. A record of the decision.</span></li>
+      </ol>
+    </section>
+    <section class="financial-section" id="reviews" aria-labelledby="reviews-title">
+      <div class="wrap financial-grid">
+        <div class="financial-copy"><p class="eyebrow">Financial reviews</p><h2 id="reviews-title">Put the plan beside<br>what actually happened.</h2><p>Upload a financial plan and operating results. When the measures and periods can be matched, Lumnia brings them into one review, with the sources and assumptions alongside the numbers.</p><a class="text-link" href="/reports/sample/#/r/demo-estate-q1?k=sample">Open a public sample report <span aria-hidden="true">↗</span></a><p class="helper">Sample report uses demonstration data. Your uploads stay in your workspace.</p></div>
+        <div class="review-features">
+          <div><span>01</span><div><h3>See the whole picture</h3><p>Review the financial plan, actual results and variances. Track cost per tonne when production and cost measures are available.</p></div></div>
+          <div><span>02</span><div><h3>Explore what could change</h3><p>Adjust forecast assumptions and use Monte Carlo scenarios to explore a range of outcomes. Assumptions remain visible.</p></div></div>
+          <div><span>03</span><div><h3>Know what needs a second look</h3><p>Inspect the source measures, unmatched periods and preparation issues before relying on a comparison.</p></div></div>
+        </div>
+      </div>
+    </section>
+    <section class="section wrap" aria-labelledby="workspace-title">
+      <div class="section-heading"><div><p class="eyebrow">One workspace, two purposes</p><h2 id="workspace-title">Explore in Studio.<br>Return to your Reports.</h2></div><p>Your working analysis and published review belong together. Each has a clear place.</p></div>
+      <div class="workspace-options">
+        <a class="workspace-option" href="/workspace/#/analysis"><div class="option-heading"><span class="option-icon" aria-hidden="true">↗</span><span>For exploring</span></div><h3>Analytics Studio</h3><p>Upload files, review preparation, ask follow-up questions and save your work.</p><span class="option-link">Open Studio <span aria-hidden="true">↗</span></span></a>
+        <a class="workspace-option" href="/workspace/#/reports"><div class="option-heading"><span class="option-icon" aria-hidden="true">▤</span><span>For keeping the record</span></div><h3>Reports</h3><p>Reopen published financial reviews. Move them to Trash, restore them or delete them when they are no longer needed.</p><span class="option-link">Open Reports <span aria-hidden="true">↗</span></span></a>
+      </div>
+    </section>
+    <section class="faq-section wrap" aria-labelledby="faq-title">
+      <div><p class="eyebrow">Before you begin</p><h2 id="faq-title">A few useful answers.</h2></div>
+      <div class="faqs">
+        <details><summary>Does my data need to be clean already?</summary><p>No. Lumnia can detect tables and prepare common spreadsheet layouts. It surfaces uncertain mappings, missing values and inconsistencies for review. Complex files may need you to confirm the measures and periods before analysis.</p></details>
+        <details><summary>Will every upload get a financial review?</summary><p>The output follows the data. Sales and other tabular datasets open in Analytics Studio. Compatible financial plans and operating results can produce a financial review with comparisons, cost measures and scenarios. Lumnia flags gaps when the data does not support a result.</p></details>
+        <details><summary>What can I ask my dashboard?</summary><p>Start with the suggested questions in your workspace. You can explore supported measures, add breakdowns and, in a financial review, change supported scenario assumptions. Available questions depend on the data and analysis you have opened.</p></details>
+        <details><summary>Are published reviews public?</summary><p>Publishing a financial review saves a fixed version in your private Reports tab. Your saved, editable review remains available in Studio. The public sample report is a separate example using demonstration data.</p></details>
+        <details><summary>How do I get started?</summary><p>If you have a Lumnia account, <a href="/workspace/#/analysis">sign in to Studio</a> and upload your files. If you are new, <a href="/signup/">request access</a> so we can help set up your workspace.</p></details>
+      </div>
+    </section>
+    <section class="closing"><div class="wrap"><img src="/brand/lumnia-mark-void.svg" alt="" width="72" height="72"><p class="eyebrow">Light where there was none.</p><h2>Start with the files you have.<br>Find the questions worth asking.</h2><div class="closing-actions"><a class="button button-gold" href="/signup/">Request access <span aria-hidden="true">↗</span></a><a class="button button-outline" href="/workspace/#/analysis">Open your workspace <span aria-hidden="true">↗</span></a></div></div></section>
+  </main>
+  <footer class="site-footer"><div class="wrap"><a class="brand" href="/" aria-label="Lumnia home"><img src="/brand/lumnia-logo-void.svg" alt="LUMNIA" width="164" height="43" loading="lazy"></a><p>Operating intelligence for frontier industry.</p><nav aria-label="Footer navigation"><a href="/reports/sample/#/r/demo-estate-q1?k=sample">Sample report</a><a href="/workspace/#/reports">Reports</a><a href="/signup/">Request access</a></nav></div></footer>
+</body>
+</html>

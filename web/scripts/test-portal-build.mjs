@@ -1,4 +1,4 @@
-/** Check preserved production pages and the bridge without a browser session. */
+/** Check homepage assembly and compatibility with existing report links. */
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -26,14 +26,20 @@ await test('Signup, sample viewer, image and both synthetic workbooks retain exa
     assert.equal(hash(await fs.readFile(path.join(output, asset.path))), asset.sha256)
   }
 })
-await test('The public root changes only by the workspace entry, stylesheet and bridge', async () => {
-  const original = await fs.readFile(path.join(portal, 'public/index.html'), 'utf8')
-  let assembled = await fs.readFile(path.join(output, 'index.html'), 'utf8')
-  assert.equal((assembled.match(/id="lumnia-workspace-entry"/g) || []).length, 1)
-  assert.match(assembled, /href="\/workspace\/#\/analysis"/)
-  assembled = assembled.replace('<link rel="stylesheet" href="/lumnia-workspace-bridge.css">\n', '')
-    .replace(/<a id="lumnia-workspace-entry"[^]*?<\/a>\n<script src="\/lumnia-workspace-bridge.js"><\/script>\n/, '')
-  assert.equal(assembled, original)
+await test('The public homepage and legacy viewer each receive only the early routing bridge', async () => {
+  for (const [source, served] of [['home/index.html', 'index.html'], ['public/index.html', 'legacy/index.html']]) {
+    const original = await fs.readFile(path.join(portal, source), 'utf8')
+    const assembled = await fs.readFile(path.join(output, served), 'utf8')
+    const injection = '\n<script src="/lumnia-workspace-bridge.js"></script>'
+    assert.equal((assembled.match(/src="\/lumnia-workspace-bridge.js"/g) || []).length, 1)
+    assert.match(assembled, /<head(?:\s[^>]*)?>\n<script src="\/lumnia-workspace-bridge.js"><\/script>/i)
+    assert.equal(assembled.replace(injection, ''), original)
+    assert.doesNotMatch(assembled, /id="lumnia-workspace-entry"/)
+  }
+  for (const filename of ['home.css', 'home.js']) {
+    assert.equal(await fs.readFile(path.join(output, filename), 'utf8'), await fs.readFile(path.join(portal, 'home', filename), 'utf8'))
+  }
+  assert.equal(await fs.readFile(path.join(output, 'lumnia-workspace-bridge.js'), 'utf8'), await fs.readFile(path.join(portal, 'bridge.js'), 'utf8'))
 })
 await test('The new app stays under workspace with its built scripts and stylesheet available', async () => {
   const original = await fs.readFile(path.join(web, 'dist/index.html'), 'utf8')
@@ -47,33 +53,47 @@ await test('The new app stays under workspace with its built scripts and stylesh
 })
 
 const bridge = await fs.readFile(path.join(portal, 'bridge.js'), 'utf8')
-function exercise(startHash) {
-  const redirects = [], entry = { hidden: false }, listeners = new Map()
-  const window = { location: { hash: startHash, replace: next => redirects.push(next) }, addEventListener: (name, fn) => listeners.set(name, fn) }
-  const document = { getElementById: id => { assert.equal(id, 'lumnia-workspace-entry'); return entry } }
-  // No session storage is exposed here: the bridge must not read credentials.
-  vm.runInNewContext(bridge, { window, document })
-  return { redirects, entry, window, listeners }
+function exercise(startHash, pathname = '/') {
+  const redirects = [], listeners = new Map()
+  const window = { location: { pathname, hash: startHash, replace: next => redirects.push(next) }, addEventListener: (name, fn) => listeners.set(name, fn) }
+  // No DOM or session storage is exposed here: routing must work before page
+  // rendering and must not read credentials.
+  vm.runInNewContext(bridge, { window })
+  return { redirects, window, listeners }
 }
-await test('Only workspace and published-review paths redirect, retaining their full hash', () => {
-  for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
-    assert.deepEqual(exercise(route).redirects, ['/workspace/' + route])
-  }
-  assert.deepEqual(exercise('#signin').redirects, ['/workspace/#/analysis'])
-  for (const route of ['', '#/', '#contact', '#/studio-other', '#/analysis-other', '#/published-other']) {
-    const result = exercise(route)
-    assert.deepEqual(result.redirects, [])
-    assert.equal(result.entry.hidden, false)
+await test('Workspace and published-review entry paths redirect with their full hash from either page', () => {
+  for (const pathname of ['/', '/legacy/', '/legacy/index.html']) {
+    for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
+      assert.deepEqual(exercise(route, pathname).redirects, ['/workspace/' + route])
+    }
+    assert.deepEqual(exercise('#signin', pathname).redirects, ['/workspace/#/analysis'])
   }
 })
-await test('Existing report and portal links stay on the original viewer without an overlay', () => {
-  for (const route of ['#/r/public-report?k=sample', '#/m/client-report', '#/c/estate?k=portal', '#/a/report']) {
-    const result = exercise(route)
-    assert.deepEqual(result.redirects, [])
-    assert.equal(result.entry.hidden, true)
-    result.window.location.hash = '#/'
-    result.listeners.get('hashchange')()
-    assert.equal(result.entry.hidden, false)
+await test('Homepage section anchors stay on the homepage and unrelated route names do not redirect', () => {
+  for (const route of ['', '#/', '#contact', '#/studio-other', '#/analysis-other', '#/published-other']) {
+    assert.deepEqual(exercise(route).redirects, [])
   }
+})
+await test('Existing report and portal links open the preserved viewer without losing identifiers or share keys', () => {
+  for (const route of ['#/r/public-report?k=sample', '#/m/client-report', '#/c/estate?k=portal', '#/a/report', '#/r/encoded%20id?k=a%2Bb%3D', '#/r/%E0%A4%A?k=sample']) {
+    assert.deepEqual(exercise(route).redirects, ['/legacy/' + route])
+    for (const pathname of ['/legacy/', '/legacy/index.html']) {
+      assert.deepEqual(exercise(route, pathname).redirects, [])
+    }
+  }
+})
+await test('Legacy home links return to the current homepage, including after a hash change', () => {
+  for (const route of ['', '#/']) assert.deepEqual(exercise(route, '/legacy/').redirects, ['/'])
+  assert.deepEqual(exercise('#contact', '/legacy/').redirects, ['/#contact'])
+  const result = exercise('#/m/client-report', '/legacy/')
+  result.window.location.hash = '#/'
+  result.listeners.get('hashchange')()
+  assert.deepEqual(result.redirects, ['/'])
+})
+await test('Hash navigation from the homepage can still open an existing shared report', () => {
+  const result = exercise('#/')
+  result.window.location.hash = '#/r/public-report?k=sample'
+  result.listeners.get('hashchange')()
+  assert.deepEqual(result.redirects, ['/legacy/#/r/public-report?k=sample'])
 })
 console.log(`${passed} portal assembly checks passed.`)

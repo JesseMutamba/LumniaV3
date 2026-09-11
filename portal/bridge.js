@@ -1,7 +1,8 @@
-/* First-party entry from the preserved public portal into the new workspace. */
+/* Route public entry points without reading or modifying client credentials. */
 (() => {
   function sync() {
     const hash = window.location.hash || '#/'
+    const legacy = /^\/legacy(?:\/|$)/.test(window.location.pathname)
     if (hash === '#signin') {
       window.location.replace('/workspace/#/analysis')
       return
@@ -10,8 +11,13 @@
       window.location.replace('/workspace/' + hash)
       return
     }
-    const entry = document.getElementById('lumnia-workspace-entry')
-    if (entry) entry.hidden = /^#\/(?:r|m|c|a)\//.test(hash)
+    if (/^#\/(?:r|m|c|a)(?:\/|$)/.test(hash)) {
+      if (!legacy) window.location.replace('/legacy/' + hash)
+      return
+    }
+    // The preserved viewer's brand/home links should return to the current
+    // public page. Its old marketing and sign-in screen are no longer entries.
+    if (legacy) window.location.replace(hash === '#/' ? '/' : '/' + hash)
   }
   window.addEventListener('hashchange', sync)
   sync()

@@ -1,6 +1,8 @@
-# Preserved production portal
+# Production homepage and preserved viewers
 
-These six public assets were captured from the existing Lumnia Railway service on September 10, 2026. The files in `public/` preserve their downloaded bytes. They retain the current landing and sign-in page, pilot-request form, public sample report, sample image, and two explicitly synthetic sample workbooks. The private uploaded PVAK workbooks are not included.
+The authored homepage lives in `home/`. It explains the current upload, preparation, analysis and review workflow and links to the private workspace, account requests and public example.
+
+Six public assets were captured from the existing Lumnia Railway service on September 10, 2026. The files in `public/` preserve their downloaded bytes. They retain the original application (including shared-report viewers), pilot-request form, public sample report, sample image, and two explicitly synthetic sample workbooks. The private uploaded PVAK workbooks are not included.
 
 `public-snapshot.json` records the source URLs, byte counts, and SHA-256 hashes. The HTML was checked for private-key blocks and recognizable provider, GitHub, AWS, and JWT credential literals; none were found. Both public workbooks contain demonstration markers and neither contains the private uploaded workbook names. This is a focused release check, not a general credential audit.
 
@@ -17,11 +19,13 @@ These six public assets were captured from the existing Lumnia Railway service o
 
 Build the React application from `web/` with `npm run build -- --base ./`, then run `node scripts/build-portal.mjs`. The result is `static-portal/` beside `web/` (or `/static-portal/` in Docker):
 
-- `/` keeps the existing application, with one branded “Analyze your data” entry added by the first-party bridge. It opens `/workspace/#/analysis`, which uses the existing client session or prompts for sign-in.
-- `/#/analysis`, `/#/studio`, and `/#/financial` redirect to the equivalent workspace hash. Existing shared-report hashes remain on the original viewer.
+- `/` serves the authored homepage, with its CSS and script at `/home.css` and `/home.js`. Its Studio and Reports links open the existing client workspace or prompt for sign-in.
+- `/#/analysis`, `/#/studio`, `/#/financial`, `/#/reports` and `/#/published/…` redirect to the equivalent workspace hash. `#signin` opens the Studio sign-in screen.
+- Existing `/#/r/…`, `/#/m/…`, `/#/c/…` and `/#/a/…` links redirect to `/legacy/` with the complete hash retained. That path serves the preserved original application; report identifiers and share keys are not decoded or rewritten. The original bundle uses root-relative API and sample-asset URLs, so moving the viewer does not change those requests.
+- The preserved viewer's home links return to `/`; its workspace and sign-in links open `/workspace/`. No floating workspace button is injected over either page.
 - `/signup/` and `/reports/sample/` preserve their original content and public source URLs.
 - `/workspace/` serves the new compiled application; `/brand/` makes its supplied LUMNIA assets available to existing root-relative component styles.
 
-The build verifies every captured source hash before assembly. Only the assembled root HTML receives the bridge stylesheet, link, and script; no captured source is rewritten. The script does not read or modify session tokens. The preserved and new apps share the existing same-origin `lumnia.session` storage convention.
+The build verifies every captured source hash before assembly. Both the authored homepage and the assembled legacy viewer receive a routing script at the start of their head, before application rendering. No captured source is rewritten. The script does not read or modify session tokens. The preserved and new apps share the existing same-origin `lumnia.session` storage convention.
 
 The standard SQLite application continues to use `web/dist/`; these public portal snapshots are assembled separately. The Docker build must include `portal/` and explicitly permit the two synthetic workbook paths through `.dockerignore`, which excludes private spreadsheets by default.
