@@ -13,6 +13,7 @@ export function parseWorkspaceRoute(target = location) {
   }
   if (/^\/(?:r|a|m|published|c)(?:\/|$)/.test(path)) return {view:'invalid'}
   if (path === '/analysis' || path === '/financial') return {view:'clientstudio'}
+  if (path === '/demo') return {view:'demo'}
   if (path === '/reports') return {view:'clientreports'}
   if (path.startsWith('/studio')) return {view:'studio'}
   if (/^\/workspace(?:\/|$)/.test(target.pathname)) return {view:'clientstudio'}

@@ -3,6 +3,7 @@ import Block, { Sim } from './blocks/index.jsx'
 import Studio from './pages/Studio.jsx'
 const ClientAnalysisWorkspace=lazy(()=>import('./pages/GeneralWorkspace.jsx').then(m=>({default:m.ClientAnalysisWorkspace})))
 const PublishedReview=lazy(()=>import('./pages/PublishedReview.jsx'))
+const PublicDemo=lazy(()=>import('./pages/PublicDemo.jsx'))
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import Landing from './pages/Landing.jsx'
 import ClientHome from './pages/ClientHome.jsx'
@@ -116,7 +117,7 @@ export default function App() {
   // be two headers arguing with each other.
   const clientStudio = route.view === 'clientstudio' || route.view === 'studio' && portalMode === true
   const clientReports = route.view === 'clientreports' || route.view === 'home' && !!session
-  const bare = clientStudio || clientReports || route.view === 'publication' || route.view === 'invalid' || route.view === 'home' && !session
+  const bare = clientStudio || clientReports || route.view === 'demo' || route.view === 'publication' || route.view === 'invalid' || route.view === 'home' && !session
   // A cream document under a dark green bar is two designs meeting at a
   // hard edge. Reader surfaces get a header in their own key.
   const reading = ['report', 'myreport', 'authorreport', 'portal'].includes(route.view) || !!session
@@ -147,6 +148,7 @@ export default function App() {
       {route.view === 'report' && (
         <Viewer key={`public:${route.id}:${route.key}`} id={route.id} shareKey={route.key} locale={locale} />
       )}
+      {route.view === 'demo' && <Suspense fallback={<WorkspaceState message="Opening the interactive demo…" />}><PublicDemo /></Suspense>}
       {route.view === 'authorreport' && portalMode === false && <Viewer key={'author:' + route.id} id={route.id} author locale={locale} />}
       {route.view === 'authorreport' && portalMode === true && <div className="doc inst"><p>Open published reports from your client workspace or their shared link.</p><a href="#/">Open client workspace →</a></div>}
       {route.view === 'myreport' && (

@@ -37,7 +37,7 @@ export default function WorkspaceSignIn({ onSignIn, expired = false }) {
         <p>Prepare your files, explore the findings and shape the dashboard through conversation.</p>
         <ol><li><FileSpreadsheet size={20} /><span>Upload your workbooks together</span></li><li><ArrowRight size={20} /><span>Open a review built from your data</span></li><li><ShieldCheck size={20} /><span>Save your work and pick up where you left off</span></li></ol>
       </div>
-      <p className="ws-entry-tagline">Light where there was none.</p>
+      <p className="ws-entry-tagline">Light where there’s none.</p>
     </section>
     <section className="ws-entry-form-panel">
       <form className="ws-entry-form" onSubmit={submit}>

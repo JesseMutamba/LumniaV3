@@ -2,12 +2,16 @@
 (() => {
   function sync() {
     const hash = window.location.hash || '#/'
+    if (/^\/reports\/sample(?:\/|$)/.test(window.location.pathname)) {
+      window.location.replace('/workspace/#/demo')
+      return
+    }
     const legacy = /^\/legacy(?:\/|$)/.test(window.location.pathname)
     if (hash === '#signin') {
       window.location.replace('/workspace/#/analysis')
       return
     }
-    if (/^#\/(?:analysis|studio|financial|reports|published)(?:[/?]|$)/.test(hash)) {
+    if (/^#\/(?:analysis|studio|financial|reports|published|demo)(?:[/?]|$)/.test(hash)) {
       window.location.replace('/workspace/' + hash)
       return
     }

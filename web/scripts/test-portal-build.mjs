@@ -21,13 +21,13 @@ await test('Every captured public source retains its recorded hash', async () =>
   assert.equal(manifest.files.length, 6)
   for (const asset of manifest.files) assert.equal(hash(await fs.readFile(path.join(portal, 'public', asset.path))), asset.sha256)
 })
-await test('Signup, sample viewer, image and both synthetic workbooks retain exact served bytes', async () => {
-  for (const asset of manifest.files.filter(asset => asset.path !== 'index.html')) {
+await test('Signup, image and both archived synthetic workbooks retain exact served bytes', async () => {
+  for (const asset of manifest.files.filter(asset => !['index.html','reports/sample/index.html'].includes(asset.path))) {
     assert.equal(hash(await fs.readFile(path.join(output, asset.path))), asset.sha256)
   }
 })
 await test('The public homepage and legacy viewer each receive only the early routing bridge', async () => {
-  for (const [source, served] of [['home/index.html', 'index.html'], ['public/index.html', 'legacy/index.html']]) {
+  for (const [source, served] of [['home/index.html', 'index.html'], ['public/index.html', 'legacy/index.html'], ['home/sample.html','reports/sample/index.html']]) {
     const original = await fs.readFile(path.join(portal, source), 'utf8')
     const assembled = await fs.readFile(path.join(output, served), 'utf8')
     const injection = '\n<script src="/lumnia-workspace-bridge.js"></script>'
@@ -63,10 +63,17 @@ function exercise(startHash, pathname = '/') {
 }
 await test('Workspace and published-review entry paths redirect with their full hash from either page', () => {
   for (const pathname of ['/', '/legacy/', '/legacy/index.html']) {
-    for (const route of ['#/analysis', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
+    for (const route of ['#/analysis', '#/demo', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
       assert.deepEqual(exercise(route, pathname).redirects, ['/workspace/' + route])
     }
     assert.deepEqual(exercise('#signin', pathname).redirects, ['/workspace/#/analysis'])
+  }
+})
+await test('Old sample URLs open the current public demo instead of the archived viewer', () => {
+  for (const pathname of ['/reports/sample','/reports/sample/','/reports/sample/index.html']) {
+    for (const fragment of ['', '#/', '#/r/demo-estate-q1?k=sample']) {
+      assert.deepEqual(exercise(fragment,pathname).redirects, ['/workspace/#/demo'])
+    }
   }
 })
 await test('Homepage section anchors stay on the homepage and unrelated route names do not redirect', () => {

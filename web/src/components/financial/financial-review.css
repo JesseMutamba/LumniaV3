@@ -131,3 +131,5 @@
   .financial-review .fr-topbar [data-slot=button]{white-space:normal}
   .fr-modal-content .fr-publication-summary{padding:15px}
 }
+
+.fr-example-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;margin-top:12px}.fr-example-actions .fr-text-link{margin:0}.fr-example-actions>p{flex-basis:100%}

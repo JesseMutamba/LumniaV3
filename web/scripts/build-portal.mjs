@@ -20,7 +20,7 @@ for (const asset of manifest.files) {
   }
 }
 await fs.access(path.join(dist, 'index.html'))
-for (const filename of ['index.html', 'home.css', 'home.js']) await fs.access(path.join(home, filename))
+for (const filename of ['index.html', 'home.css', 'home.js', 'sample.html']) await fs.access(path.join(home, filename))
 await fs.rm(output, { recursive: true, force: true })
 await fs.mkdir(output, { recursive: true })
 await fs.cp(source, output, { recursive: true })
@@ -40,5 +40,6 @@ function withBridge(index) {
 await fs.mkdir(path.join(output, 'legacy'), { recursive: true })
 await fs.writeFile(path.join(output, 'legacy/index.html'), withBridge(await fs.readFile(path.join(source, 'index.html'), 'utf8')))
 await fs.writeFile(path.join(output, 'index.html'), withBridge(await fs.readFile(path.join(home, 'index.html'), 'utf8')))
+await fs.writeFile(path.join(output, 'reports/sample/index.html'), withBridge(await fs.readFile(path.join(home, 'sample.html'), 'utf8')))
 for (const filename of ['home.css', 'home.js']) await fs.copyFile(path.join(home, filename), path.join(output, filename))
-console.log('Portal assembled: current homepage; preserved shared viewers, signup and sample; analysis at /workspace/#/analysis.')
+console.log('Portal assembled: current homepage and demo; preserved shared viewers and signup; analysis at /workspace/#/analysis.')

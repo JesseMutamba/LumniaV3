@@ -70,7 +70,7 @@ export default function Landing({ onSignIn }) {
       <header className="ld-hero">
         <div className="ld-wrap ld-hero-in">
           <img className="ld-lum" src={mark} alt="Lumnia" />
-          <h1>Light where there was none.</h1>
+          <h1>Light where there’s none.</h1>
           <p className="ld-lede">
             The operating-intelligence layer for African industry. Upload raw operational
             files — exactly as you keep them — and Lumnia turns scattered, delayed data into
@@ -241,7 +241,7 @@ export default function Landing({ onSignIn }) {
               <span>LUMNIA</span>
             </a>
             <div className="ey ld-ey-dim">
-              Light where there was none &nbsp;·&nbsp; EST. 2026
+              Light where there’s none &nbsp;·&nbsp; EST. 2026
             </div>
           </div>
         </div>

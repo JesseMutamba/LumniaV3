@@ -1,6 +1,6 @@
 # Production homepage and preserved viewers
 
-The authored homepage lives in `home/`. It explains the current upload, preparation, analysis and review workflow and links to the private workspace, account requests and public example.
+The authored homepage lives in `home/`. It explains the current upload, preparation, analysis and review workflow and links to the private workspace, account requests and the current public financial demo.
 
 Six public assets were captured from the existing Lumnia Railway service on September 10, 2026. The files in `public/` preserve their downloaded bytes. They retain the original application (including shared-report viewers), pilot-request form, public sample report, sample image, and two explicitly synthetic sample workbooks. The private uploaded PVAK workbooks are not included.
 
@@ -23,9 +23,10 @@ Build the React application from `web/` with `npm run build -- --base ./`, then 
 - `/#/analysis`, `/#/studio`, `/#/financial`, `/#/reports` and `/#/published/…` redirect to the equivalent workspace hash. `#signin` opens the Studio sign-in screen.
 - Existing `/#/r/…`, `/#/m/…`, `/#/c/…` and `/#/a/…` links redirect to `/legacy/` with the complete hash retained. That path serves the preserved original application; report identifiers and share keys are not decoded or rewritten. The original bundle uses root-relative API and sample-asset URLs, so moving the viewer does not change those requests.
 - The preserved viewer's home links return to `/`; its workspace and sign-in links open `/workspace/`. No floating workspace button is injected over either page.
-- `/signup/` and `/reports/sample/` preserve their original content and public source URLs.
+- `/signup/` preserves its original form. `/reports/sample/` now redirects to `/workspace/#/demo`, so previously shared sample links show the current financial dashboard. The archived sample source remains unchanged in `public/`, but is no longer served at that entry.
+- `/workspace/#/demo` uses the production FinancialReview component with generated, explicitly synthetic plan and Q1 workbooks passed through the same preparation pipeline as client uploads. It does not save or publish records, requires no login, and provides both example files for download. The original public workbook URLs remain available for old source references.
 - `/workspace/` serves the new compiled application; `/brand/` makes its supplied LUMNIA assets available to existing root-relative component styles.
 
-The build verifies every captured source hash before assembly. Both the authored homepage and the assembled legacy viewer receive a routing script at the start of their head, before application rendering. No captured source is rewritten. The script does not read or modify session tokens. The preserved and new apps share the existing same-origin `lumnia.session` storage convention.
+The build verifies every captured source hash before assembly. The authored homepage, sample redirect and assembled legacy viewer receive a routing script at the start of their head, before application rendering. No captured source is rewritten. The script does not read or modify session tokens. The preserved and new apps share the existing same-origin `lumnia.session` storage convention.
 
 The standard SQLite application continues to use `web/dist/`; these public portal snapshots are assembled separately. The Docker build must include `portal/` and explicitly permit the two synthetic workbook paths through `.dockerignore`, which excludes private spreadsheets by default.

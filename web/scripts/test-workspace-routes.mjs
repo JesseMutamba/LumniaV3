@@ -16,6 +16,8 @@ assert.deepEqual(parse('#/published/report-123'), {view:'publication',id:'report
 assert.deepEqual(parse('#/reports'), {view:'clientreports'})
 assert.deepEqual(parse('#/analysis'), {view:'clientstudio'})
 assert.deepEqual(parse('#/financial'), {view:'clientstudio'})
+assert.deepEqual(parse('#/demo'), {view:'demo'})
+assert.deepEqual(parse('#/demo', '/'), {view:'demo'})
 assert.deepEqual(parse('#/studio?workspace=financial'), {view:'studio'})
 assert.deepEqual(parse('#/'), {view:'clientstudio'})
 assert.deepEqual(parse('#/', '/'), {view:'home'})
