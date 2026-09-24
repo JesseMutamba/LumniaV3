@@ -22,3 +22,5 @@ assert.deepEqual(parse('#/studio?workspace=financial'), {view:'studio'})
 assert.deepEqual(parse('#/'), {view:'clientstudio'})
 assert.deepEqual(parse('#/', '/'), {view:'home'})
 console.log('PASS Valid report links retain their routes and malformed or incomplete links return a recoverable invalid-link state.')
+
+assert.deepEqual(parse('#/public-finance'), {view:'publicfinance'})
