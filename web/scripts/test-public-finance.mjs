@@ -11,3 +11,7 @@ assert.throws(()=>prepare('id;budget\nx;5'),/Colonnes manquantes/);assert.throws
 assert.ok(prepare(EXAMPLE_CSV.replace('1 200 000;24','2 000 000;24')).issues.some(i=>i.reasons.some(r=>r.includes('payé ≤'))));
 assert.ok(prepare(EXAMPLE_CSV.replace('2026-06-30','2026-02-31')).issues.some(i=>i.reasons.includes('Échéance invalide')));
 assert.equal(summarize([]).execution,0);console.log('PASS Public-finance totals, exclusions, import, saved-data roundtrip and scenario arithmetic.');
+
+const malformed=prepare(EXAMPLE_CSV.replace('2026-06-30;À suivre','2026-06-30;À suivre;unexpected'));
+assert.equal(prepare(malformed.sourceText).issues.length,malformed.issues.length,'save/reopen preserves malformed row exclusions');
+assert.equal(prepare(d.sourceText).sourceText,EXAMPLE_CSV);

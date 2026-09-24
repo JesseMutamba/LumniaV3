@@ -50,7 +50,7 @@ export function prepare(text){
     if(seen.has(r.id))reasons.push('Identifiant déjà présent à la ligne '+seen.get(r.id));else seen.set(r.id,sourceRow);
     if(reasons.length)issues.push({sourceRow,id:r.id,reasons,raw});else accepted.push(r);
   }
-  return {rows:accepted,issues,source,normalized};
+  return {rows:accepted,issues,source,normalized,sourceText:text};
 }
 export const money = n => new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0}).format(n)+' $';
 export const pct=n=>new Intl.NumberFormat('fr-FR',{style:'percent',maximumFractionDigits:1}).format(n);
