@@ -92,19 +92,23 @@ function Empty({ height, children }) {
   );
 }
 
-export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, locale = "en" }) {
+export default function MonteCarloTab({ rows = [], initialParams, initialRun, initialMetric = "totalRevenue", seed, onRun, onParamsChange, onMetricChange, locale = "en" }) {
   const T = strings(locale);
   const nf = (n) => n.toLocaleString(locale === "fr" ? "fr-FR" : "en-US");
   const [params, setParams] = useState({ ...DEFAULT_PARAMS, ...initialParams });
-  const [run, setRun] = useState(null); // { trials, seed, params }
+  const [run, setRun] = useState(() => initialRun ? {...runMonteCarlo(rows, initialRun.params, {seed:initialRun.seed}), requestedSeed:initialRun.requestedSeed ?? null} : null); // { trials, seed, params }
   const [running, setRunning] = useState(false);
-  const [metric, setMetric] = useState("totalRevenue");
+  const [metric, setMetric] = useState(METRICS.some(m => m.key === initialMetric) ? initialMetric : "totalRevenue");
+  function updateParams(patch) { const next = {...params,...patch}; setParams(next); onParamsChange?.(next); }
+  function changeMetric(key) { setMetric(key); onMetricChange?.(key); }
+  const needsRerun = run && (Object.keys(DEFAULT_PARAMS).some(k => params[k] !== run.params[k]) || (seed ?? null) !== (run.requestedSeed ?? null));
 
   const execute = useCallback(() => {
     if (rows.length === 0) return;
     setRunning(true);
     setTimeout(() => {
       const result = runMonteCarlo(rows, params, seed != null ? { seed } : {});
+      result.requestedSeed = seed ?? null;
       setRun(result);
       setRunning(false);
       if (onRun) onRun(result);
@@ -112,7 +116,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, l
   }, [rows, params, seed, onRun]);
 
   useEffect(() => {
-    execute();
+    if (!initialRun) execute();
     // Deliberately once on mount. Re-running on every slider tick would make
     // a 5,000-draw simulation fight the drag.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,7 +204,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, l
                   max={f.max}
                   step={f.step}
                   value={params[f.key]}
-                  onChange={(v) => setParams((p) => ({ ...p, [f.key]: v }))}
+                  onChange={(v) => updateParams({[f.key]:v})}
                   format={f.format}
                   color={C[g.accent]}
                 />
@@ -215,7 +219,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, l
             max={5000}
             step={500}
             value={params.N}
-            onChange={(v) => setParams((p) => ({ ...p, N: v }))}
+            onChange={(v) => updateParams({N:v})}
             format={nf}
             color={C.gold}
           />
@@ -236,6 +240,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, l
             {running ? T.running : T.run(nf(params.N))}
           </button>
 
+          {needsRerun && <p role="status" style={{fontSize:14}}>{locale === "fr" ? "Paramètres modifiés. Relancez la simulation." : "Parameters changed. Run the simulation to update these results."}</p>}
           {run && (
             <p style={{ color: C.muted, fontSize: 9, fontFamily: "monospace", margin: "8px 0 0", textAlign: "center" }}>
               {T.seedNote(run.seed)}
@@ -250,7 +255,7 @@ export default function MonteCarloTab({ rows = [], initialParams, seed, onRun, l
               <button
                 key={m.key}
                 type="button"
-                onClick={() => setMetric(m.key)}
+                onClick={() => changeMetric(m.key)}
                 style={{
                   background: metric === m.key ? C[m.accent] : C.panel,
                   border: `1px solid ${metric === m.key ? C[m.accent] : C.border}`,

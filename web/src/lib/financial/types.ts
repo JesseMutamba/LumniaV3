@@ -1,0 +1,13 @@
+export type Ref={file:string;sheet:string;cell:string;formula?:string|null};
+export type Figure={value:number|null;unit:string;refs:Ref[];note?:string};
+export type PlanYear={year:number;revenue:Figure;opex:Figure;capex:Figure;ffb:Figure;cpo:Figure;hectares:Figure;balance:Figure};
+export type MonthlyPoint={month:number;label:string;year:number;value:number;refs:Ref[];unit:string};
+export type SeriesBinding={table:string;metric:string;unit:string;months:MonthlyPoint[];alternatives?:{table:string;metric:string;total:number}[]};
+export type Q1Metric={id:string;label:string;unit:string;plan:Figure;actual:Figure;planMonths:MonthlyPoint[];actualMonths:MonthlyPoint[];status:'aligned'|'review'|'unavailable'};
+export type Issue={id:string;severity:'info'|'warning';title:string;detail:string;refs:Ref[]};
+export type Category={name:string;value:number;refs:Ref[]};
+export type SourceInfo={name:string;hash:string;sheets:number;tables:number;formulaErrors:number;missingFormulaResults:number};
+export type Review={version:1;title:string;createdAt:string;plan:PlanYear[];forecastYears:number[];comparisonYear:number;q1:Q1Metric[];monthlyPlan:{opex:MonthlyPoint[];ffb:MonthlyPoint[];cpo:MonthlyPoint[]};planCosts:Category[];actualCosts:Category[];issues:Issue[];sources:SourceInfo[];steps:{name:string;detail:string}[];bindings:{role:string;table:string;metric:string;unit:string}[]};
+export type Drivers={pricePct:number;volumePct:number;extractionPp:number;opexPct:number;capexPct:number;variableCostPct:number};
+export type RiskSettings={trials:number;seed:number;priceStd:number;volumeStd:number;opexStd:number;extractionStd:number;year:number};
+export type ForecastRow={year:number;revenue:number;opex:number;capex:number;ffb:number;cpo:number;costPerTonne:number|null;operatingResult:number;afterCapex:number;pricePerTonne:number;extraction:number};

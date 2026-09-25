@@ -146,14 +146,13 @@ SESSION_HOURS = 12
 
 
 def new_session(username: str, hours: int = SESSION_HOURS) -> tuple[str, int]:
-    """A signed bearer token: username, expiry, and an HMAC over both.
-
-    Deliberately not a random token in a sessions table. Nothing here needs
-    server-side revocation of a single session — disabling the account stops
-    the next request, because every request re-reads the account.
-    """
+    """Bind sessions to this account/password generation, not a reusable name."""
+    from . import store
+    revision = store.session_revision(username)
+    if revision is None:
+        raise HTTPException(401, "Sign in to continue.")
     exp = int(time.time()) + hours * 3600
-    body = f"{username}:{exp}"
+    body = f"v2:{username}:{revision}:{exp}"
     sig = hmac.new(_session_secret().encode(), body.encode(), hashlib.sha256).hexdigest()
     return f"{body}:{sig}", exp
 
@@ -163,20 +162,22 @@ def read_session(token: str | None) -> str | None:
     malformed input: a bad token is an anonymous request, not a crash."""
     if not token:
         return None
-    parts = token.rsplit(":", 2)
-    if len(parts) != 3:
+    parts = token.split(":")
+    if len(parts) != 5 or parts[0] != "v2":
         return None
-    username, exp, sig = parts
-    body = f"{username}:{exp}"
+    _, username, revision, exp, sig = parts
+    body = ":".join(parts[:-1])
     want = hmac.new(_session_secret().encode(), body.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, want):
         return None
     try:
-        if int(exp) < time.time():
+        if int(exp) <= time.time():
             return None
     except ValueError:
         return None
-    return username
+    from . import store
+    current = store.session_revision(username)
+    return username if current and hmac.compare_digest(revision, current) else None
 
 
 # Login is the one path where guessing pays, so it gets a tighter budget than

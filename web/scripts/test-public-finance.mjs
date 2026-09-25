@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {EXAMPLE_CSV,prepare,summarize,scenario,toCSV} from '../src/lib/public-finance/model.js';
+const d=prepare(EXAMPLE_CSV),t=summarize(d.rows);
+assert.equal(d.source.length,10);assert.equal(d.rows.length,8);assert.equal(d.issues.length,2);
+assert.match(d.issues[0].reasons.join(),/déjà présent/);assert.match(d.issues[1].reasons.join(),/paye manquant/);
+assert.equal(t.budget,9700000);assert.equal(t.paye,5240000);assert.equal(t.engage,6880000);assert.equal(t.late,3);
+assert.equal(scenario(d.rows,10,0).gap,446000);assert.equal(scenario(d.rows,0,0).gap,0);assert.equal(scenario(d.rows,10,10).gap,0);
+assert.equal(prepare(toCSV(d.source.map(r=>r.raw))).issues.length,2,'reopening preserves missing cells and exclusions');
+assert.equal(summarize(prepare(EXAMPLE_CSV.replace('1 200 000;24','1 000 000;24')).rows).paye,5040000);
+assert.throws(()=>prepare('id;budget\nx;5'),/Colonnes manquantes/);assert.throws(()=>prepare(EXAMPLE_CSV+'\n"unclosed'),/fermée/);
+assert.ok(prepare(EXAMPLE_CSV.replace('1 200 000;24','2 000 000;24')).issues.some(i=>i.reasons.some(r=>r.includes('payé ≤'))));
+assert.ok(prepare(EXAMPLE_CSV.replace('2026-06-30','2026-02-31')).issues.some(i=>i.reasons.includes('Échéance invalide')));
+assert.equal(summarize([]).execution,0);console.log('PASS Public-finance totals, exclusions, import, saved-data roundtrip and scenario arithmetic.');
+
+const malformed=prepare(EXAMPLE_CSV.replace('2026-06-30;À suivre','2026-06-30;À suivre;unexpected'));
+assert.equal(prepare(malformed.sourceText).issues.length,malformed.issues.length,'save/reopen preserves malformed row exclusions');
+assert.equal(prepare(d.sourceText).sourceText,EXAMPLE_CSV);

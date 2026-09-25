@@ -1,0 +1,5 @@
+Order ID,Date,Region,Net Revenue,Currency
+U1,2026-01-01,North,100,USD
+E1,2026-01-02,South,200,EUR
+U2,2026-02-01,North,50,USD
+E2,2026-02-02,South,250,EUR

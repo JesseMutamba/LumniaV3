@@ -1,0 +1,42 @@
+{
+  "captured_on": "2026-09-10",
+  "source_origin": "https://lumnia-reports-production.up.railway.app",
+  "files": [
+    {
+      "path": "assets/sample-report.webp",
+      "url": "https://lumnia-reports-production.up.railway.app/assets/sample-report.webp",
+      "sha256": "3394245bf618c884c72b289a0555eae98d7b1c3dcb3972620f7950d781cb1e64",
+      "bytes": 75228
+    },
+    {
+      "path": "assets/sources/Journal_tresorerie_2026.xlsx",
+      "url": "https://lumnia-reports-production.up.railway.app/assets/sources/Journal_tresorerie_2026.xlsx",
+      "sha256": "bcadc9c17b1db7e4f1efce83c87983ba6d4e4fe444b4c00f18fcb9b4e304a571",
+      "bytes": 8325
+    },
+    {
+      "path": "assets/sources/Plan_budgetaire_2026_2030.xlsx",
+      "url": "https://lumnia-reports-production.up.railway.app/assets/sources/Plan_budgetaire_2026_2030.xlsx",
+      "sha256": "da6864e1def9f7242be8f0bce337526564a932243b471cefa55d3a0c8265fa16",
+      "bytes": 9454
+    },
+    {
+      "path": "index.html",
+      "url": "https://lumnia-reports-production.up.railway.app/",
+      "sha256": "7ad917e18e2b54663ff1db66fe09b11cfd5353a7f7ad6148f80e02c5f9fae0a2",
+      "bytes": 844608
+    },
+    {
+      "path": "reports/sample/index.html",
+      "url": "https://lumnia-reports-production.up.railway.app/reports/sample/",
+      "sha256": "e056f9e3cfc9bab5fbb19d5da94001867bc67aa93547c9a3f365082c24121b66",
+      "bytes": 875042
+    },
+    {
+      "path": "signup/index.html",
+      "url": "https://lumnia-reports-production.up.railway.app/signup/",
+      "sha256": "21ad233daa0e59ec9274a342d9f44314ba0b166119483a8bd80a3b24497badcc",
+      "bytes": 10429
+    }
+  ]
+}

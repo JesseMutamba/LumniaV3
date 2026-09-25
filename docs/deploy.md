@@ -1,5 +1,7 @@
 # Hosting Lumnia
 
+For the current Railway release, follow [railway-release.md](railway-release.md). The Render instructions below describe the older deployment setup.
+
 One service. The API is a small container with a SQLite file on a volume,
 and the same container serves the built web client — one origin, no CORS,
 one bill. Total cost at this scale: the host's smallest paid instance.
@@ -81,7 +83,7 @@ The whole platform is one file.
 
 ```bash
 # Render: Shell tab on the service
-cat /data/lumnia.db > /tmp/backup.db   # then download it
+python -c "import sqlite3; s=sqlite3.connect('/data/lumnia.db'); d=sqlite3.connect('/tmp/lumnia-backup.db'); s.backup(d); d.close(); s.close()"
 ```
 
 Worth a weekly cron until reports start mattering, then worth more than that.

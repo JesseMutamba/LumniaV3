@@ -116,8 +116,11 @@ const Rail = ({ b, locale, sources }) => (
         </div>
       </div>
       {b.rows.map((r, i) => {
-        const wA = (r.actual.n / r.envelope.n) * 100
-        const wP = (r.pace.n / r.envelope.n) * 100
+        const validEnvelope = Number.isFinite(r.envelope.n) && r.envelope.n > 0
+        const validPace = Number.isFinite(r.pace.n) && r.pace.n > 0
+        const clamp = n => Math.max(0, Math.min(100, n))
+        const wA = validEnvelope ? clamp(r.actual.n / r.envelope.n * 100) : 0
+        const wP = validEnvelope ? clamp(r.pace.n / r.envelope.n * 100) : 0
         return (
           <div className="rr" key={i}>
             <div className="rr-t">
@@ -127,10 +130,12 @@ const Rail = ({ b, locale, sources }) => (
               </div>
               <div className="rr-v">
                 <b>{fmt(r.actual, locale)}</b> {locale === 'fr' ? 'contre' : 'vs'}{' '}
-                {fmt(r.pace, locale)} {locale === 'fr' ? 'sur' : 'of'}{' '}
-                {fmt(r.envelope, locale)}
+                {fmt(r.pace, locale)}<Prov src={r.pace.src} sources={sources} /> {locale === 'fr' ? 'sur' : 'of'}{' '}
+                {fmt(r.envelope, locale)}<Prov src={r.envelope.src} sources={sources} />
               </div>
             </div>
+            {!validEnvelope && <small>{locale === "fr" ? "Budget positif non défini" : "No positive budget defined"}</small>}
+            {validEnvelope && Math.max(r.actual.n, r.pace.n) > r.envelope.n && <small>{locale === "fr" ? "Barre limitée au budget ; les valeurs complètes sont indiquées ci-dessus." : "Bar capped at budget; full values are shown above."}</small>}
             <div className="bar">
               <div className="fill" style={{ width: `${wA}%` }} />
               <div
@@ -138,7 +143,7 @@ const Rail = ({ b, locale, sources }) => (
                 style={{ left: `${wA}%`, width: `${Math.max(0, wP - wA)}%` }}
               />
               <div className="notch" style={{ left: `${wP}%` }} />
-              <div className="pct">{nf((r.actual.n / r.pace.n) * 100, locale, 1)} %</div>
+              <div className="pct">{validPace ? nf(r.actual.n / r.pace.n * 100, locale, 1) + ' %' : (locale === 'fr' ? 'Rythme non défini' : 'Pace not defined')}</div>
             </div>
           </div>
         )
@@ -191,7 +196,7 @@ function BarPair({ b, locale, sources }) {
   const [asTable, setAsTable] = useState(false)
   const x = b.x === 'months' ? MONTHS[locale] : b.x
   const [plan, act] = b.series
-  const vals = (s) => (s ? s.values.map((v) => v.n) : [])
+  const vals = (s) => (s ? s.values.filter(v => v != null).map((v) => v.n) : [])
   // The viewBox is the chart's own coordinate space, and SVG text scales
   // with it. At 960 units wide inside a half-width panel, 9.5px axis labels
   // land at about 4.6 real pixels — present, and unreadable. Keeping the box
@@ -362,9 +367,10 @@ function BarTable({ b, x, plan, act, locale, sources }) {
   // series carries a rate there is no honest total to show, and the
   // numerator and denominator that would give one are not in this block —
   // so the row is left off rather than filled with a plausible number.
-  const unit = plan?.values?.[0]?.unit ?? 'none'
+  const unit = plan?.values?.find(v => v != null)?.unit ?? act?.values?.find(v => v != null)?.unit ?? 'none'
   const ADDITIVE = new Set(['USD', 'CDF', 't', 'ha', 'count'])
   const addable = ADDITIVE.has(unit)
+  const sameCoverage = !plan || !act || x.every((_,i) => (plan.values[i] != null) === (act.values[i] != null))
   const totalOf = (s) =>
     s ? s.values.reduce((a, v) => a + (v?.n ?? 0), 0) : null
   const tot = (n) =>
@@ -408,8 +414,7 @@ function BarTable({ b, x, plan, act, locale, sources }) {
             {act && <td>{tot(totalOf(act))}</td>}
             {plan && act && (
               <td className={totalOf(act) - totalOf(plan) < 0 ? 'neg' : 'pos'}>
-                {totalOf(act) - totalOf(plan) > 0 ? '+' : ''}
-                {tot(totalOf(act) - totalOf(plan))}
+                {sameCoverage ? (totalOf(act) - totalOf(plan) > 0 ? '+' : '') + tot(totalOf(act) - totalOf(plan)) : (L ? 'Périodes différentes' : 'Different coverage')}
               </td>
             )}
           </tr>
@@ -484,49 +489,15 @@ const Flag = ({ b, locale, sources }) => (
 const cellOf = (v, locale) =>
   v && typeof v === 'object' ? fmt(v, locale) : String(v ?? '')
 
-const Table = ({ b, locale, sources }) => (
-  <div className="b">
-    <div className="scroll">
-      <table>
-        <thead>
-          <tr>
-            {b.columns.map((c) => (
-              <th key={c.key} style={{ textAlign: c.align }}>
-                {t(c.label, locale)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {b.rows.map((row, i) => (
-            <tr key={i}>
-              {b.columns.map((c) => {
-                const v = row[c.key]
-                const neg = v && typeof v === 'object' && v.n < 0
-                return (
-                  <td key={c.key} className={c.signed ? (neg ? 'neg' : 'pos') : ''}>
-                    {c.signed && typeof v === 'object' ? signed(v, locale) : cellOf(v, locale)}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-    {/* A bare "Source" label with nothing after it promises provenance and
-        then withholds it. A table of prose has no cells to point at. */}
-    {b.rows?.some((r) => b.columns.some((c) => r[c.key]?.src)) && (
-      <div className="src-note">
-        {locale === 'fr' ? 'Source' : 'Source'}
-        <Prov
-          src={b.columns.map((c) => b.rows[0]?.[c.key]?.src).find(Boolean)}
-          sources={sources}
-        />
-      </div>
-    )}
-  </div>
-)
+function Table({ b, locale, sources }) {
+  const renderRow = (row, key) => <tr key={key}>{b.columns.map(c => {
+    const v = row[c.key], numeric = v != null && typeof v === 'object' && Number.isFinite(v.n)
+    return <td key={c.key} style={{ textAlign: c.align }} className={c.signed && numeric ? (v.n < 0 ? 'neg' : v.n > 0 ? 'pos' : '') : ''}>
+      {c.signed && numeric ? signed(v, locale) : cellOf(v, locale)}{numeric && v.src && <Prov src={v.src} sources={sources} />}
+    </td>
+  })}</tr>
+  return <div className="b"><div className="scroll"><table><thead><tr>{b.columns.map(c => <th key={c.key} style={{textAlign:c.align}}>{t(c.label,locale)}</th>)}</tr></thead><tbody>{b.rows.map((r,i)=>renderRow(r,i))}</tbody>{b.total && <tfoot>{renderRow(b.total,'total')}</tfoot>}</table></div></div>
+}
 
 /* ---------------------------------------------------------------- ledger */
 

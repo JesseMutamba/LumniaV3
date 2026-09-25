@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 # --------------------------------------------------------------------------
 # primitives
@@ -40,8 +40,31 @@ class Src(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     file: int = Field(ge=0)
-    sheet: str
-    cells: str
+    sheet: str = Field(min_length=1)
+    cells: str = Field(min_length=1)
+
+    @field_validator("sheet")
+    @classmethod
+    def sheet_is_named(cls, value):
+        if not value.strip():
+            raise ValueError("A source sheet name is required")
+        return value
+
+    @field_validator("cells")
+    @classmethod
+    def valid_cell_addresses(cls, value):
+        import re
+        parts = re.split(r"\s*(?:\+|,|;)\s*", value.strip())
+        for part in parts:
+            if not re.fullmatch(r"\$?[A-Za-z]{1,3}\$?[1-9][0-9]*(?::\$?[A-Za-z]{1,3}\$?[1-9][0-9]*)?", part):
+                raise ValueError("Use spreadsheet cell addresses or ranges, such as B7 or B7:D7")
+            for cell in part.split(":"):
+                m = re.fullmatch(r"\$?([A-Za-z]{1,3})\$?([1-9][0-9]*)", cell)
+                col = 0
+                for ch in m[1].upper(): col = col * 26 + ord(ch) - 64
+                if col > 16384 or int(m[2]) > 1048576:
+                    raise ValueError("Source address exceeds spreadsheet bounds")
+        return value
 
 
 class Value(BaseModel):
@@ -53,7 +76,7 @@ class Value(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
-    n: float
+    n: FiniteFloat
     unit: Unit = "none"
     src: Src
     derived: Derived = "read"
@@ -101,7 +124,7 @@ class Step(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: Text
     cells: str | None = None  # "SHEET!A1:C3" — sheet-qualified, human-first
-    n: float | None = None
+    n: FiniteFloat | None = None
 
 
 class Kpi(BaseModel):
@@ -138,7 +161,7 @@ class Series(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: str
     label: Text
-    values: list[Value]
+    values: list[Value | None]
 
 
 class BarPair(Block):
@@ -163,8 +186,8 @@ class Column(BaseModel):
 class Table(Block):
     type: Literal["table"] = "table"
     columns: list[Column] = Field(min_length=1)
-    rows: list[dict[str, Value | str | float]]
-    total: dict[str, Value | str | float] | None = None
+    rows: list[dict[str, Value | str]]
+    total: dict[str, Value | str] | None = None
 
 
 class Evidence(BaseModel):

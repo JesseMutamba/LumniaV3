@@ -1,0 +1,220 @@
+{
+  "sales_clean.csv": {
+    "domain": "sales",
+    "grain": "one order per row",
+    "revenue": 1000,
+    "cogs": 520,
+    "gross_profit": 480,
+    "gross_margin": 0.48,
+    "quantity": 20,
+    "monthly_revenue": {
+      "2026-01": 300,
+      "2026-02": 400,
+      "2026-03": 300
+    },
+    "revenue_by_region": {
+      "North": 200,
+      "South": 800
+    },
+    "revenue_by_product": {
+      "Widget": 550,
+      "Gadget": 450
+    },
+    "distinct_orders": 6,
+    "negative_revenue_rows": 1,
+    "mean_net_revenue_per_order": 166.66666666666666,
+    "forecast_eligible": false,
+    "note": "Negative revenue is a return/refund candidate; preserve it. Revenue and COGS matched by row."
+  },
+  "sales_dirty.csv": {
+    "exact_duplicates": 1,
+    "repeated_headers": 1,
+    "subtotal_rows": 1,
+    "missing_date_rows": 1,
+    "invalid_revenue_rows": 1,
+    "revenue_keep_duplicate_exclude_subtotal": 1500,
+    "revenue_remove_duplicate_exclude_subtotal": 1400,
+    "dated_revenue_keep_duplicate": 1100,
+    "dated_revenue_remove_duplicate": 1000,
+    "gross_profit_matched_valid_revenue_with_duplicate": 720,
+    "gross_profit_matched_valid_revenue_without_duplicate": 680,
+    "dated_revenue_by_month_keep_duplicate": {
+      "2026-01": 400,
+      "2026-02": 400,
+      "2026-03": 300
+    },
+    "gate": [
+      "Deduplication requires confirmation.",
+      "Grand total is a summary and not an order.",
+      "The undated 400 can count toward total but not a monthly chart; reconcile excluded amount.",
+      "The invalid-revenue row must not contribute its COGS to matched gross profit."
+    ]
+  },
+  "sales_mixed_currency.csv": {
+    "totals_by_currency": {
+      "USD": 150,
+      "EUR": 450
+    },
+    "combined_total": null,
+    "gate": "No single currency total or conversion without documented rates."
+  },
+  "sales_conflicting_currency.csv": {
+    "verified_total": null,
+    "gate": "Column USD conflicts with row EUR; explicit review, not currency selection by precedence."
+  },
+  "dates_ambiguous.csv": {
+    "date_order_requires_confirmation": true,
+    "total": 600,
+    "monthly_MDY": {
+      "2026-01": 100,
+      "2026-02": 200,
+      "2026-03": 300
+    },
+    "monthly_DMY": {
+      "2026-02": 100,
+      "2026-03": 200,
+      "2026-04": 300
+    }
+  },
+  "numbers_ambiguous.csv": {
+    "locale_requires_confirmation": true,
+    "amount_if_thousands_comma": 6912,
+    "amount_if_decimal_comma": 6.912,
+    "quantity_if_thousands_comma": 4690,
+    "quantity_if_decimal_comma": 4.69
+  },
+  "numbers_decimal_comma.csv": {
+    "revenue": 3580.25,
+    "quantity": 5,
+    "currency": "EUR"
+  },
+  "inventory_snapshots.csv": {
+    "domain": "inventory",
+    "snapshot_date": "2026-02-28",
+    "latest_snapshot_units": 19,
+    "latest_snapshot_value_usd": 140,
+    "latest_by_sku_units": {
+      "0012": 16,
+      "0013": 3
+    },
+    "reorder_rows": [
+      [
+        "0013",
+        "East"
+      ],
+      [
+        "0012",
+        "West"
+      ]
+    ],
+    "naive_all_rows_sum_is_wrong": 34,
+    "gate": "Stocks are additive across distinct SKU/location at one complete snapshot, not across dates. Preserve identifiers with leading zeroes. Do not claim turnover or days of stock without flows/sales."
+  },
+  "operations_weighted.csv": {
+    "domain": "operations",
+    "output_tonnes": 100,
+    "opex_usd": 5500,
+    "cost_per_tonne_usd": 55,
+    "monthly_cost_per_tonne_usd": [
+      100,
+      50
+    ],
+    "incorrect_mean_monthly_cost": 75,
+    "defects": 10,
+    "units_produced": 1000,
+    "defect_rate": 0.01,
+    "run_hours": 95,
+    "planned_hours": 110,
+    "utilization": 0.8636363636363636,
+    "gate": "Weighted ratios require the sum of eligible numerators divided by the sum of their matching denominators."
+  },
+  "budget_actual.csv": {
+    "domain": "finance",
+    "common_months": [
+      "2026-01",
+      "2026-02"
+    ],
+    "budget_full_revenue": 3600,
+    "budget_common_revenue": 2200,
+    "actual_common_revenue": 2200,
+    "revenue_variance": 0,
+    "budget_common_cogs": 1300,
+    "actual_common_cogs": 1340,
+    "budget_common_opex": 450,
+    "actual_common_opex": 460,
+    "opex_variance_amount_actual_minus_budget": 10,
+    "opex_variance_unfavorable": true,
+    "actual_gross_profit": 860,
+    "budget_gross_profit": 900,
+    "actual_operating_result": 400,
+    "budget_operating_result": 450,
+    "actual_latest_cash": 130,
+    "budget_common_latest_cash": 150,
+    "gate": "Compare only common periods. Separate Budget and Actual. Closing cash is last observation, not monthly sum. Operating result excludes interest/tax and should not be called net profit."
+  },
+  "forecast_monthly_history.csv": {
+    "history_length": 24,
+    "history_total": 5160,
+    "monthly_slope": 10,
+    "last_observation": 330,
+    "next_three_linear_baseline": [
+      340,
+      350,
+      360
+    ],
+    "next_three_naive_baseline": [
+      330,
+      330,
+      330
+    ],
+    "trailing_holdout_6_linear_mae": 0,
+    "trailing_holdout_6_naive_one_step_mae": 10,
+    "forecast_eligible": true,
+    "note": "Eligibility threshold is a product rule, not a guarantee of accuracy. State model/holdout/frequency and prediction interval assumptions."
+  },
+  "forecast_missing_month.csv": {
+    "observed_months": 23,
+    "gap": [
+      "2024-05"
+    ],
+    "history_total": 5020,
+    "unreviewed_forecast_eligible": false,
+    "gate": "Gap must be disclosed; do not fill missing month with zero or join nonadjacent months in month-on-month growth."
+  },
+  "forecast_budget_only.csv": {
+    "statistical_forecast_eligible": false,
+    "scenario_eligible": true,
+    "gate": "A plan is an assumption series, not observed historical performance."
+  },
+  "identifiers.csv": {
+    "preserved_ids": [
+      "000123",
+      "000124"
+    ],
+    "preserved_skus": [
+      "0012",
+      "0013"
+    ],
+    "preserved_postal_codes": [
+      "02139",
+      "02140"
+    ],
+    "numeric_metric_total": 300,
+    "date_column": null,
+    "gate": "Numeric identifiers and postal codes are categorical; never infer Excel dates from their values."
+  },
+  "rates_only.csv": {
+    "summed_defect_rate": null,
+    "weighted_defect_rate": null,
+    "summed_unit_cost": null,
+    "weighted_unit_cost": null,
+    "gate": "Show reported rates by period. Without numerators and denominators, never sum or claim weighted aggregate rates."
+  },
+  "quoted_delimiter.csv": {
+    "delimiter": ";",
+    "columns": 3,
+    "rows": 2,
+    "revenue": 3580.25,
+    "gate": "Delimiter detection must count only unquoted separators and score consistent row widths."
+  }
+}

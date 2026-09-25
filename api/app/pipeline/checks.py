@@ -63,7 +63,7 @@ def detect_rollup_hierarchy(
             if child is None:
                 break
             run += child
-            if abs(run - target) <= tol and j > i:
+            if abs(run - target) <= tol and j > i + 1:
                 best = list(range(i + 1, j + 1))  # longest match wins
         if best:
             parents.append(
@@ -95,7 +95,7 @@ def detect_rollup_hierarchy(
     return CheckResult(
         "CH-001 rollup-hierarchy",
         False,
-        f"{len(parents)} parent row(s) detected; naive sum overstates by "
+        f"{len(parents)} possible subtotal row(s); review before summing. Potential overlap: "
         f"{naive - correct:,.2f}",
         {
             "parents": parents,
@@ -162,26 +162,36 @@ def check_provenance(report) -> CheckResult:
     """
     missing: list[str] = []
     seen = 0
+    document = report.model_dump(mode="json") if hasattr(report, "model_dump") else report
+    sources = document.get("sources", [])
+    indexes = [source.get("idx") for source in sources]
+    if len(indexes) != len(set(indexes)):
+        missing.append("report.sources: duplicate source indexes")
+    if indexes != list(range(len(indexes))):
+        missing.append("report.sources: indexes must match their list positions")
+    declared = set(indexes)
 
     def walk(node, path="report"):
         nonlocal seen
         if isinstance(node, dict):
             if {"n", "unit"} <= node.keys():
                 seen += 1
-                if not node.get("src"):
+                if not node.get("src") or node["src"].get("file") not in declared:
                     missing.append(path)
                 return
+            if {"file", "sheet", "cells"} <= node.keys() and node["file"] not in declared:
+                missing.append(path)
             for k, v in node.items():
                 walk(v, f"{path}.{k}")
         elif isinstance(node, list):
             for i, v in enumerate(node):
                 walk(v, f"{path}[{i}]")
 
-    walk(report.model_dump(mode="json") if hasattr(report, "model_dump") else report)
+    walk(document)
     return CheckResult(
         "CH-004 provenance",
         not missing,
-        f"{seen} value(s) checked, {len(missing)} without a source cell",
+        f"{seen} value(s) checked, {len(missing)} invalid source reference(s)",
         {"missing": missing, "values_checked": seen},
     )
 
@@ -192,3 +202,39 @@ REGISTRY = {
     "CH-003": check_implied_price,
     "CH-004": check_provenance,
 }
+
+
+def check_detected_tables(workbook, table):
+    """Apply checks only to unambiguous, explicitly labeled table structures.
+
+    Possible hierarchical totals are left to CH-001; never silently repair them.
+    Price consistency is descriptive and is not proof of a pricing error.
+    """
+    import re
+    from .ingest import a1
+    sheet = workbook[table.sheet]
+    text_cols = [c for c in table.columns if c.kind == "text"]
+    numbers = [c for c in table.columns if c.kind == "number"]
+    if not text_cols or not numbers:
+        return []
+    labels = [(r, str(sheet.cell(r, text_cols[0].index) or "").strip().casefold()) for r in range(table.first_row, table.last_row + 1)]
+    total_rows = [(r, label) for r, label in labels if re.fullmatch(r"(?:grand )?total(?: general)?", label)]
+    out = []
+    if len(total_rows) == 1 and total_rows[0][0] == table.last_row and not any("total" in label for r, label in labels[:-1]):
+        last = total_rows[0][0]
+        for col in numbers:
+            vals = [sheet.cell(r, col.index) for r, label in labels if r < last and label]
+            stated = sheet.cell(last, col.index)
+            if len(vals) >= 2 and all(isinstance(v, (int,float)) and not isinstance(v,bool) for v in vals + [stated]):
+                result = check_subtotal(vals, stated, f"{table.sheet}!{a1(last,col.index)}")
+                out.append(result)
+    revenue = [r for r,label in labels if label in {"revenue", "revenus", "chiffre d'affaires", "sales revenue"}]
+    volume = [r for r,label in labels if label in {"volume", "quantite", "quantity", "sales volume"}]
+    if len(revenue) == len(volume) == 1:
+        pairs = [(sheet.cell(revenue[0], c.index), sheet.cell(volume[0], c.index), c.label) for c in numbers]
+        pairs = [(r,v,l) for r,v,l in pairs if isinstance(r,(int,float)) and isinstance(v,(int,float)) and v > 0]
+        if len(pairs) >= 2:
+            result = check_implied_price([r for r,_,_ in pairs], [v for _,v,_ in pairs], [l for _,_,l in pairs])
+            result.detail += "; inferred from explicitly labeled revenue and volume rows; review units and pricing assumptions."
+            out.append(result)
+    return out

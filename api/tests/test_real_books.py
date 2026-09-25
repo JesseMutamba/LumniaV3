@@ -100,8 +100,8 @@ def test_double_counted_entries_match_the_hand_analysis(blocks):
     same amount — around 45 entries and $124k found by hand."""
     flag = next(b for b in blocks
                 if getattr(b, "type", "") == "flag" and "Rapprochement" in b.tag.fr)
-    assert "50 écriture" in flag.title.fr
-    assert "133 302" in flag.title.fr
+    assert "44 écriture" in flag.title.fr
+    assert "123 200 USD" in flag.title.fr
 
 
 def test_production_is_further_behind_plan_than_spend(blocks):
@@ -122,7 +122,8 @@ def test_cost_per_tonne_is_a_third_above_plan(blocks):
     against the 746 $ the plan implied over the same three months."""
     k = _kpi(blocks, "Coût par tonne CPO")
     assert k.value.n == pytest.approx(982.5, abs=1.0)
-    assert k.tone == "bad"
+    assert k.tone == "warn"  # Source years differ; comparison is explicitly unverified.
+    assert "NON VÉRIFIÉ" in k.sub.fr
     assert k.lineage[0].n == pytest.approx(44_624, abs=1)   # spend
     assert k.lineage[1].n == pytest.approx(45, abs=0.5)     # tonnes
     assert k.lineage[3].n == pytest.approx(746, abs=1)      # rate the plan implied

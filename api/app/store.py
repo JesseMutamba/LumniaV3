@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS users (
   org        TEXT NOT NULL REFERENCES orgs(id),
   pw_hash    TEXT NOT NULL,      -- PBKDF2-HMAC-SHA256, never the password
   pw_salt    TEXT NOT NULL,
+  session_id TEXT,
   created_at TEXT NOT NULL,
   last_seen  TEXT,
   disabled   INTEGER NOT NULL DEFAULT 0
@@ -94,10 +95,23 @@ CREATE TABLE IF NOT EXISTS reads (
   client TEXT                  -- coarse fingerprint, not an identity
 );
 CREATE INDEX IF NOT EXISTS reads_target ON reads(kind, target, ts);
+CREATE TABLE IF NOT EXISTS analytics_dashboards (
+  id TEXT PRIMARY KEY,
+  org TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  doc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS analytics_dashboards_org ON analytics_dashboards(org, updated_at);
 """
 
 
 def connect() -> sqlite3.Connection:
+    if os.getenv("DATABASE_URL"):
+        from .postgres import connect_studio
+        return connect_studio()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
@@ -106,8 +120,13 @@ def connect() -> sqlite3.Connection:
 
 
 def init() -> None:
+    if os.getenv("DATABASE_URL"):
+        raise RuntimeError("PostgreSQL must start through the production portal, not SQLite bootstrap")
     with connect() as con:
         con.executescript(SCHEMA)
+        if "session_id" not in {r[1] for r in con.execute("PRAGMA table_info(users)")}:
+            con.execute("ALTER TABLE users ADD COLUMN session_id TEXT")
+        con.execute("UPDATE users SET session_id=lower(hex(randomblob(16))) WHERE session_id IS NULL")
         # Databases created before the portal existed lack the column.
         try:
             con.execute("ALTER TABLE orgs ADD COLUMN share_key TEXT")
@@ -153,6 +172,17 @@ def list_orgs() -> list[Org]:
 
 
 def get_org(org_id: str) -> Org | None:
+    if os.getenv("DATABASE_URL"):
+        from .portal_db import org_row
+        row = org_row(org_id)
+        if not row:
+            return None
+        # Production allows {} and English-only JSON metadata. Do not make
+        # a display-only SQLite field a prerequisite for client persistence.
+        sub = row["sub"] if isinstance(row["sub"], dict) else {}
+        fr = sub.get("fr") if isinstance(sub.get("fr"), str) else ""
+        en = sub.get("en") if isinstance(sub.get("en"), str) else ""
+        return Org(id=row["id"], name=row["name"], sub=Text(fr=fr or en, en=en or fr))
     return next((o for o in list_orgs() if o.id == org_id), None)
 
 
@@ -205,14 +235,23 @@ def put_user(username: str, org_id: str, pw_hash: str, pw_salt: str) -> ClientUs
     now = datetime.now(timezone.utc).isoformat()
     with connect() as con:
         con.execute(
-            "INSERT INTO users (username,org,pw_hash,pw_salt,created_at) VALUES (?,?,?,?,?) "
+            "INSERT INTO users (username,org,pw_hash,pw_salt,created_at,session_id) VALUES (?,?,?,?,?,lower(hex(randomblob(16)))) "
             "ON CONFLICT(username) DO UPDATE SET "
-            "  org=excluded.org, pw_hash=excluded.pw_hash, pw_salt=excluded.pw_salt",
+            "  pw_hash=excluded.pw_hash, pw_salt=excluded.pw_salt, session_id=excluded.session_id WHERE users.org=excluded.org",
             (username, org_id, pw_hash, pw_salt, now),
         )
     user = get_user(username)
     assert user is not None  # just written
     return user
+
+
+def session_revision(username: str) -> str | None:
+    """An opaque account generation, rotated on password or access changes."""
+    with connect() as con:
+        row = con.execute("SELECT session_id,disabled FROM users WHERE username=?", (username,)).fetchone()
+    if not row or row["disabled"]:
+        return None
+    return row["session_id"]
 
 
 def get_user(username: str) -> ClientUser | None:
@@ -256,7 +295,7 @@ def list_users(org_id: str | None = None) -> list[ClientUser]:
 def set_user_disabled(username: str, disabled: bool) -> bool:
     with connect() as con:
         cur = con.execute(
-            "UPDATE users SET disabled = ? WHERE username = ?", (1 if disabled else 0, username)
+            "UPDATE users SET disabled = ?, session_id=lower(hex(randomblob(16))) WHERE username = ?", (1 if disabled else 0, username)
         )
     return cur.rowcount > 0
 
@@ -281,6 +320,13 @@ def touch_user(username: str) -> None:
 # contexts — append-only. A definition change is a new version, never an
 # overwrite, so what the parser knew last month stays answerable.
 # --------------------------------------------------------------------------
+
+def lock_definitions(con, owner: str, org: str, fingerprint: str) -> None:
+    if os.getenv("DATABASE_URL"):
+        from .postgres import lock_definitions as pg_lock
+        pg_lock(con, owner, org, fingerprint)
+    else:
+        con.execute("BEGIN IMMEDIATE")
 
 def put_context(org_id: str, doc: ContextIn) -> Context:
     from datetime import datetime, timezone
@@ -335,6 +381,26 @@ def put_ingestion(org_id: str, filename: str, sha256: str | None, summary: dict)
              sha256, json.dumps(summary)),
         )
     return seq
+
+
+def commit_ingest(org: str, entries: list[dict], run: dict | None, context_version: int | None) -> None:
+    """Commit prepared files, baselines and computed output together after success."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        version = con.execute("SELECT MAX(version) FROM contexts WHERE org=?", (org,)).fetchone()[0]
+        if version != context_version:
+            raise ValueError("Client definitions changed during upload. Please retry.")
+        for entry in entries:
+            previous = con.execute("SELECT COALESCE(MAX(seq),0) FROM ingestions WHERE org=? AND filename=?", (org, entry["filename"])).fetchone()[0]
+            if previous != entry["seq"] - 1:
+                raise ValueError("Another upload completed first. Please retry to compare the latest version.")
+            con.execute("INSERT INTO ingestions(org,filename,seq,ts,sha256,summary) VALUES(?,?,?,?,?,?)", (org,entry["filename"],entry["seq"],now,entry["sha256"],json.dumps(entry["summary"], allow_nan=False)))
+            if entry.get("body") is not None:
+                con.execute("INSERT INTO files(org,filename,seq,ts,sha256,body) VALUES(?,?,?,?,?,?)", (org,entry["filename"],entry["seq"],now,entry["sha256"],entry["body"]))
+        if run:
+            con.execute("INSERT INTO runs(org,ts,modules,facts,blocks,sources) VALUES(?,?,?,?,?,?)", (org,now,json.dumps(run["modules"]),json.dumps(run["facts"],allow_nan=False),json.dumps(run["blocks"],allow_nan=False),json.dumps(run["sources"],allow_nan=False)))
 
 
 def last_ingestion(org_id: str, filename: str) -> dict | None:
@@ -418,7 +484,7 @@ def put_file(org_id: str, filename: str, seq: int, sha256: str | None,
         )
 
 
-def latest_files(org_id: str) -> list[dict]:
+def latest_files(org_id: str, include_body: bool = True) -> list[dict]:
     """The newest kept copy of every workbook this client has sent, ordered
     by when each file was *first* seen.
 
@@ -429,7 +495,7 @@ def latest_files(org_id: str) -> list[dict]:
     would start naming the wrong workbook."""
     with connect() as con:
         rows = con.execute(
-            "SELECT f.filename, f.seq, f.ts, f.sha256, f.body FROM files f "
+            "SELECT f.filename, f.seq, f.ts, f.sha256" + (", f.body" if include_body else "") + " FROM files f "
             "JOIN (SELECT filename, MAX(seq) AS seq, MIN(ts) AS first_ts "
             "      FROM files WHERE org = ? GROUP BY filename) m "
             "  ON m.filename = f.filename AND m.seq = f.seq "
@@ -611,10 +677,10 @@ def list_context_versions(org_id: str) -> list[ContextVersion]:
 
 def put_report(rep: Report) -> Report:
     with connect() as con:
-        con.execute(
+        cur = con.execute(
             "INSERT INTO reports (id,org,status,generated_at,doc) VALUES (?,?,?,?,?) "
             "ON CONFLICT(id) DO UPDATE SET status=excluded.status, "
-            "  generated_at=excluded.generated_at, doc=excluded.doc",
+            "  generated_at=excluded.generated_at, doc=excluded.doc WHERE reports.org=excluded.org",
             (
                 rep.id,
                 rep.org,
@@ -623,6 +689,8 @@ def put_report(rep: Report) -> Report:
                 rep.model_dump_json(),
             ),
         )
+        if cur.rowcount != 1:
+            raise ValueError("This report ID belongs to another client.")
     return rep
 
 
