@@ -63,7 +63,7 @@ function exercise(startHash, pathname = '/') {
 }
 await test('Workspace and published-review entry paths redirect with their full hash from either page', () => {
   for (const pathname of ['/', '/legacy/', '/legacy/index.html']) {
-    for (const route of ['#/analysis', '#/demo', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
+    for (const route of ['#/congo-graphic', '#/public-finance', '#/analysis', '#/demo', '#/studio?workspace=financial', '#/financial', '#/studio', '#/reports', '#/published/report-123', '#/published/client%20review', '#/published/%E0%A4%A']) {
       assert.deepEqual(exercise(route, pathname).redirects, ['/workspace/' + route])
     }
     assert.deepEqual(exercise('#signin', pathname).redirects, ['/workspace/#/analysis'])

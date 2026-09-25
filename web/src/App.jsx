@@ -4,7 +4,7 @@ import Studio from './pages/Studio.jsx'
 const ClientAnalysisWorkspace=lazy(()=>import('./pages/GeneralWorkspace.jsx').then(m=>({default:m.ClientAnalysisWorkspace})))
 const PublishedReview=lazy(()=>import('./pages/PublishedReview.jsx'))
 const PublicDemo=lazy(()=>import('./pages/PublicDemo.jsx'))
-const PublicFinanceDemo=lazy(()=>import('./pages/PublicFinanceDemo.jsx'))
+const CongoGraphicDemo=lazy(()=>import('./pages/CongoGraphicDemo.jsx'))
 import Dashboard, { hasDashboard } from './pages/Dashboard.jsx'
 import Landing from './pages/Landing.jsx'
 import ClientHome from './pages/ClientHome.jsx'
@@ -110,7 +110,7 @@ export default function App() {
   // The page must tell the truth about its language, or Chrome's
   // auto-translate rewrites the report — filenames included.
   useEffect(() => {
-    document.documentElement.lang = route.view === 'publicfinance' ? 'fr' : locale
+    document.documentElement.lang = locale
   }, [locale, route.view])
 
   // The landing page brings its own nav and is written in English only, so
@@ -118,7 +118,7 @@ export default function App() {
   // be two headers arguing with each other.
   const clientStudio = route.view === 'clientstudio' || route.view === 'studio' && portalMode === true
   const clientReports = route.view === 'clientreports' || route.view === 'home' && !!session
-  const bare = clientStudio || clientReports || route.view === 'demo' || route.view === 'publicfinance' || route.view === 'publication' || route.view === 'invalid' || route.view === 'home' && !session
+  const bare = clientStudio || clientReports || route.view === 'demo' || route.view === 'congographic' || route.view === 'publication' || route.view === 'invalid' || route.view === 'home' && !session
   // A cream document under a dark green bar is two designs meeting at a
   // hard edge. Reader surfaces get a header in their own key.
   const reading = ['report', 'myreport', 'authorreport', 'portal'].includes(route.view) || !!session
@@ -149,7 +149,7 @@ export default function App() {
       {route.view === 'report' && (
         <Viewer key={`public:${route.id}:${route.key}`} id={route.id} shareKey={route.key} locale={locale} />
       )}
-      {route.view === 'publicfinance' && <Suspense fallback={<WorkspaceState message="Ouverture du mode Finances publiques…" />}><PublicFinanceDemo /></Suspense>}
+      {route.view === 'congographic' && <Suspense fallback={<WorkspaceState message="Opening Congo Graphic operations…" />}><CongoGraphicDemo /></Suspense>}
       {route.view === 'demo' && <Suspense fallback={<WorkspaceState message="Opening the interactive demo…" />}><PublicDemo /></Suspense>}
       {route.view === 'authorreport' && portalMode === false && <Viewer key={'author:' + route.id} id={route.id} author locale={locale} />}
       {route.view === 'authorreport' && portalMode === true && <div className="doc inst"><p>Open published reports from your client workspace or their shared link.</p><a href="#/">Open client workspace →</a></div>}

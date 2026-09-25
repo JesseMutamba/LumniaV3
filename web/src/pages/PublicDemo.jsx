@@ -52,7 +52,7 @@ export default function PublicDemo() {
   return <FinancialReview initialDocument={document} readOnly example resumeLastReview={false}
     workspaceName="Example workspace" studioHref="#/analysis" reportsHref="#/reports"
     exampleActions={<div className="fr-example-actions">
-      <a href="#/public-finance" className="fr-text-link">Public Finance mode ↗</a>
+      <a href="#/congo-graphic" className="fr-text-link">Congo Graphic operations ↗</a>
       <a href="#/analysis" className="fr-text-link">Analyze your own files ↗</a>
       <button className="fr-text-link" onClick={() => downloadSource(0)} disabled={downloading}>Download example plan</button>
       <button className="fr-text-link" onClick={() => downloadSource(1)} disabled={downloading}>Download example Q1 results</button>

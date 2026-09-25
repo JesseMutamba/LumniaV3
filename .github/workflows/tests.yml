@@ -48,5 +48,5 @@ jobs:
           node scripts/test-studio-intake.mjs
           node scripts/test-financial-analysis.mjs
           node scripts/test-public-financial-example.mjs
-          node scripts/test-public-finance.mjs
+          node scripts/test-congo-graphic.mjs
           node scripts/test-portal-build.mjs
